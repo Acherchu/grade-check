@@ -6,15 +6,17 @@ a build takes about a minute. Note: something on this PC auto-commits and pushes
 ("Auto-commit …" messages), so saved changes can go live without an explicit push — don't leave
 `index.html` broken on disk.
 
-A single-file GED study site organized around the four GED tests: Mathematical Reasoning,
-Reasoning Through Language Arts (RLA), Science, Social Studies.
+A single-file study site with a level ladder: **7th Grade → 8th Grade → GED**. Each level unlocks the next.
 
-- **Take a Practice Test** — one 50-question test per subject, sampled across topics by GED weight.
-  33 right ≈ an estimated 145 (passing). The 18th miss ends the test and shows every mistake with how
-  to fix it and a link to that topic's lesson. Tests save mid-way (Resume card). Scores are rough
-  estimates (`estScore`), clearly labeled unofficial.
-- **Practice & Learn** — subject → topic (31 total) → lesson → unlimited practice with instant feedback.
-  Topics missed on tests show as **weak spots** until practiced off.
+- **Grade tests (7th, 8th)** — 100 random questions, 25 each of Math, English, Science, Social Studies.
+  80 right certifies the grade; the 21st miss ends the test.
+- **GED level** (unlocked by passing 8th) — the four GED tests: Mathematical Reasoning, Reasoning Through
+  Language Arts (RLA), Science, Social Studies. One 50-question test each, sampled by GED topic weight;
+  33 right ≈ an estimated 145 (passing); the 18th miss ends it. Scores are rough estimates (`estScore`),
+  labeled unofficial. The GED level counts as done when all four are passed.
+- Every failed test shows each mistake, how to fix it, and a link to that topic's lesson. Tests save mid-way.
+- **Practice & Learn** — level tabs (open on the highest unlocked level; practice is never locked) →
+  subject → topic → lesson → unlimited practice. Topics missed on tests show as **weak spots**.
 
 Dim theme only; Web Audio sound effects with a mute button.
 
@@ -28,10 +30,13 @@ Dim theme only; Web Audio sound effects with a mute button.
 3. **`GED`** — the real structure. `GED[subject].topics[]` = `{ id, name, w, from, covers, intro, points, ex }`.
    `from` lists library topics (`"grade|subject|topicId"`) whose items are pulled in; each item gets `.ged = topicId`.
    New GED-only questions are added with `gedAdd(subject, topicId, ...items)` in later scripts.
-4. **Engine** — `buildTest(subject)`, test screens, practice screens, `Sound`. `qHtml()` renders any
-   question containing a blank line as a reading passage box + question.
+4. **Engine** — `LEVELS` builds the ladder: grade levels wrap `LESSONS`/`BANK` topics, the GED level wraps `GED`.
+   `buildTest(level, subject)`, `sample()`, test screens, `gedTestsPage`, practice screens, `Sound`.
+   `qHtml()` renders any question containing a blank line as a reading passage box + question.
 
-Progress lives in `localStorage` key `gradecheck.ged.v1` (`passed`, `best`, `seen`, `current`, `topics`).
+Progress lives in `localStorage` key `gradecheck.v2` (`certified`, `best`, `gedPassed`, `gedBest`, `seen`,
+`current`, `topics` keyed `level|subject|topicId`). On first load it imports results from the older
+`gradecheck.v1` (grade) and `gradecheck.ged.v1` (GED) keys.
 
 ## Adding content
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GED Prep</title>
+<title>Grade Check</title>
 <style>
   /* One dim, low-glare palette in every mode: muted slate, softened text, desaturated accents. */
   :root{
@@ -111,6 +111,12 @@
   .subject-strip span{font-size:.85rem;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:4px 12px}
   .subject-strip span.done{color:var(--good);border-color:var(--good);background:var(--good-bg)}
   .passage{font-size:1rem;font-weight:400;line-height:1.6;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0 0;white-space:pre-line}
+  .ladder{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:0 0 16px}
+  .ladder span{font-size:.9rem;font-weight:600;border:1px solid var(--line);border-radius:99px;padding:5px 14px;color:var(--muted)}
+  .ladder span.done{color:var(--good);border-color:var(--good);background:var(--good-bg)}
+  .ladder span.open{color:var(--accent);border-color:var(--accent)}
+  .ladder span.locked{opacity:.6}
+  .ladder i{font-style:normal;color:var(--muted)}
   .disclaimer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:14px}
   .grade .num{font-size:1.7rem}
   .rules{color:var(--muted);font-size:.95rem;margin:0}
@@ -2807,8 +2813,8 @@ document.addEventListener('pointerdown', e => {
 });
 
 // ---------- engine ----------
-const SUBJECTS = Object.keys(GED);
-const TEST_LEN = 50, PASS = 33, MAX_MISSES = TEST_LEN - PASS;
+const SUBJECT_ICON = { Math: '➗', English: '📖', Science: '🔬', 'Social Studies': '🌎' };
+const ord = g => g + (g == 1 ? 'st' : g == 2 ? 'nd' : g == 3 ? 'rd' : 'th');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const app = document.getElementById('app');
 // Questions with a reading passage (separated by a blank line) show the passage in its own readable box.
@@ -2817,17 +2823,47 @@ function qHtml(text){
   return cut < 0 ? `<div class="q">${esc(text)}</div>` : `<div class="passage">${esc(text.slice(0, cut))}</div><div class="q">${esc(text.slice(cut + 2))}</div>`;
 }
 
-const KEY = 'gradecheck.ged.v1';
-// passed: subjects passed · best: best estimated score per passed subject · topics: "subject|topicId" → { miss, right, tries }
-const fresh = () => ({ passed: [], best: {}, seen: [], current: null, topics: {} });
-function load(){ try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return fresh(); } }
+// ---------- levels: 7th grade → 8th grade → GED ----------
+// Grade levels use the grade question library (BANK/LESSONS); the GED level uses the GED structure.
+const LEVELS = [
+  ...[7, 8].map(g => ({
+    id: String(g), name: `${ord(g)} Grade`, short: `${ord(g)} grade`, kind: 'grade',
+    subjects: Object.fromEntries(Object.keys(SUBJECT_ICON).map(s => [s, {
+      name: s, short: s, icon: SUBJECT_ICON[s], about: '',
+      topics: LESSONS[g][s].map(t => ({ id: t.id, name: t.name, covers: t.covers, intro: t.intro, points: t.points, ex: t.ex, w: 1, items: BANK[g][s].filter(it => it.topic === t.id) })),
+    }])),
+  })),
+  { id: 'GED', name: 'GED', short: 'GED', kind: 'ged', subjects: GED },
+];
+const LEVEL = Object.fromEntries(LEVELS.map(l => [l.id, l]));
+const GED_SUBJECTS = Object.keys(GED);
+// Grade tests: 25 questions per subject, 80 of 100 to certify. GED: one 50-question test per subject, 33 to pass (≈145).
+const GRADE_SPEC = { perSubject: 25, len: 100, pass: 80 }, GED_SPEC = { len: 50, pass: 33 };
+const specOf = t => LEVEL[t.level].kind === 'grade' ? GRADE_SPEC : GED_SPEC;
+const maxMisses = t => specOf(t).len - specOf(t).pass;
+const testTitle = t => LEVEL[t.level].kind === 'grade' ? `${LEVEL[t.level].name} Test` : `GED ${GED[t.subject].name}`;
+
+const KEY = 'gradecheck.v2';
+// certified: grade levels passed · best: best grade score · gedPassed/gedBest: per GED subject
+// topics: "level|subject|topicId" → { miss: test misses, right / tries: practice results }
+const fresh = () => ({ certified: [], best: {}, gedPassed: [], gedBest: {}, seen: [], current: null, topics: {} });
+function load(){
+  try { const p = JSON.parse(localStorage.getItem(KEY)); if (p) return { ...fresh(), ...p }; } catch {}
+  const p = fresh();
+  // Carry over results from the earlier grade-only and GED-only versions of the site.
+  try { const old = JSON.parse(localStorage.getItem('gradecheck.v1')); if (old){ p.certified = (old.certified || []).map(String); p.best = old.best || {}; } } catch {}
+  try { const ged = JSON.parse(localStorage.getItem('gradecheck.ged.v1')); if (ged){ p.gedPassed = ged.passed || []; p.gedBest = ged.best || {}; } } catch {}
+  return p;
+}
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch {} }
 let progress = load();
 
-const findTopic = (s, id) => GED[s].topics.find(t => t.id === id);
-const topicKey = (s, id) => `${s}|${id}`;
+const levelDone = id => LEVEL[id].kind === 'grade' ? progress.certified.includes(id) : GED_SUBJECTS.every(s => progress.gedPassed.includes(s));
+const unlocked = id => { const i = LEVELS.findIndex(l => l.id === id); return i === 0 || levelDone(LEVELS[i - 1].id); };
+const findTopic = (level, s, id) => LEVEL[level].subjects[s].topics.find(t => t.id === id);
+const topicKey = (level, s, id) => `${level}|${s}|${id}`;
 const tstat = k => progress.topics[k] || (progress.topics[k] = { miss: 0, right: 0, tries: 0 });
-const allItems = s => GED[s].topics.flatMap(t => t.items);
+const typesIn = (level, s) => LEVEL[level].subjects[s].topics.reduce((n, t) => n + t.items.length, 0);
 
 // Rough, unofficial GED-style score (100–200). 65% correct maps to 145, the passing score on each real GED test.
 function estScore(right, total){
@@ -2837,58 +2873,66 @@ function estScore(right, total){
 const band = sc => sc >= 175 ? 'College Ready + Credit range' : sc >= 165 ? 'College Ready range' : sc >= 145 ? 'Passing range' : 'Below passing';
 
 // Every question you've been asked (oldest first), keyed by wording + answer, so new tests avoid repeats.
-const RECENT = 3 * TEST_LEN;
+const RECENT = 300;
 function markSeen(qs){
   const keys = qs.map(q => q.key);
   progress.seen = [...progress.seen.filter(k => !keys.includes(k)), ...keys].slice(-4000);
 }
 
-function makeQ(t, it){
+function makeQ(s, t, it){
   const q = typeof it === 'function' ? it() : MQ(it[0], it[1], shuffle(it[2]), it[3]);
-  q.key = q.q + '|' + q.answer; q.topic = t.id; q.topicName = t.name;
+  q.key = q.q + '|' + q.answer; q.subject = s; q.topic = t.id; q.topicName = t.name;
   return q;
 }
 
-// A practice test samples each topic in proportion to its weight on the real GED.
-function buildTest(s){
-  const ever = new Set(progress.seen), recent = new Set(progress.seen.slice(-RECENT)), used = new Set(), qs = [];
-  const age = k => !ever.has(k) ? 0 : !recent.has(k) ? 1 : 2;   // 0 never seen · 1 not recently · 2 recently
-  const topics = GED[s].topics, totalW = topics.reduce((n, t) => n + t.w, 0);
-  const raw = topics.map(t => TEST_LEN * t.w / totalW), counts = raw.map(Math.floor);
+// Pick `count` questions from one subject, spread across its topics by weight, preferring questions not seen before.
+function sample(level, s, count, used, age){
+  const topics = LEVEL[level].subjects[s].topics, qs = [], totalW = topics.reduce((n, t) => n + t.w, 0);
+  const raw = topics.map(t => count * t.w / totalW), counts = raw.map(Math.floor);
   raw.map((r, i) => [r - counts[i], i]).sort((a, b) => b[0] - a[0])
-    .slice(0, TEST_LEN - counts.reduce((a, b) => a + b, 0)).forEach(([, i]) => counts[i]++);
+    .slice(0, count - counts.reduce((a, b) => a + b, 0)).forEach(([, i]) => counts[i]++);
   const take = q => { used.add(q.key); qs.push(q); };
   const fill = (t, want) => {
     let n = 0;
     const gens = shuffle(t.items.filter(x => typeof x === 'function'));
     const fixed = shuffle(t.items.filter(x => typeof x !== 'function')).sort((a, b) => age(a[0] + '|' + a[1]) - age(b[0] + '|' + b[1]));
-    for (const f of fixed){ if (n >= Math.ceil(want / 3)) break; if (!used.has(f[0] + '|' + f[1]) && age(f[0] + '|' + f[1]) === 0){ take(makeQ(t, f)); n++; } }
+    for (const f of fixed){ if (n >= Math.ceil(want / 3)) break; if (!used.has(f[0] + '|' + f[1]) && age(f[0] + '|' + f[1]) === 0){ take(makeQ(s, t, f)); n++; } }
     for (let g = 0, tries = 0; n < want && gens.length && tries < 600; g++, tries++){
-      const q = makeQ(t, gens[g % gens.length]);
+      const q = makeQ(s, t, gens[g % gens.length]);
       if (used.has(q.key) || age(q.key) > (tries < 200 ? 0 : tries < 400 ? 1 : 2)) continue;
       take(q); n++;
     }
-    for (const f of fixed){ if (n >= want) break; if (!used.has(f[0] + '|' + f[1])){ take(makeQ(t, f)); n++; } }
+    for (const f of fixed){ if (n >= want) break; if (!used.has(f[0] + '|' + f[1])){ take(makeQ(s, t, f)); n++; } }
     return n;
   };
   let short = 0;
   topics.forEach((t, i) => { short += counts[i] - fill(t, counts[i]); });
   for (let round = 0; short > 0 && round < 5; round++) for (const t of shuffle(topics)){ if (short <= 0) break; short -= fill(t, 1); }
+  return qs;
+}
+
+function buildTest(level, subject){
+  const ever = new Set(progress.seen), recent = new Set(progress.seen.slice(-RECENT)), used = new Set();
+  const age = k => !ever.has(k) ? 0 : !recent.has(k) ? 1 : 2;   // 0 never seen · 1 not recently · 2 recently
+  const L = LEVEL[level];
+  const qs = L.kind === 'grade'
+    ? Object.keys(L.subjects).flatMap(s => sample(level, s, GRADE_SPEC.perSubject, used, age))
+    : sample(level, subject, GED_SPEC.len, used, age);
   return shuffle(qs);
 }
 
-let test = null, prac = null;
+let test = null, prac = null, practiceLevel = null;   // null → open Practice on the highest unlocked level
 
 // A topic is a weak spot while its test misses outweigh practice (every 2 correct practice answers cancel 1 miss).
 function weakSpots(){
   return Object.entries(progress.topics)
-    .map(([k, st]) => { const [s, id] = k.split('|'); return { s, id, st, score: st.miss - st.right / 2 }; })
-    .filter(w => w.score > 0 && GED[w.s] && findTopic(w.s, w.id))
+    .map(([k, st]) => { const [level, s, id] = k.split('|'); return { level, s, id, st, score: st.miss - st.right / 2 }; })
+    .filter(w => w.score > 0 && LEVEL[w.level]?.subjects[w.s] && findTopic(w.level, w.s, w.id))
     .sort((a, b) => b.score - a.score);
 }
-const resumeCard = () => progress.current && GED[progress.current.subject] ? `<div class="card grade ready"><div class="num">▶</div>
-    <div class="info"><h3>Test in progress</h3><small>${GED[progress.current.subject].name} · question ${progress.current.i + 1} of ${TEST_LEN} · ${progress.current.misses.length} missed</small></div>
-    <button class="primary" id="resume">Resume</button></div>` : '';
+const resumeCard = () => { const c = progress.current; return c && LEVEL[c.level] ? `<div class="card grade ready"><div class="num">▶</div>
+    <div class="info"><h3>Test in progress</h3><small>${testTitle(c)} · question ${c.i + 1} of ${specOf(c).len} · ${c.misses.length} missed</small></div>
+    <button class="primary" id="resume">Resume</button></div>` : ''; };
 function bindCommon(back){
   const r = document.getElementById('resume');
   if (r) r.onclick = () => { test = progress.current; showQuestion(); };
@@ -2896,75 +2940,109 @@ function bindCommon(back){
   if (b) b.onclick = back;
   window.scrollTo(0, 0);
 }
+const ladder = () => `<div class="ladder">${LEVELS.map(l => `<span class="${levelDone(l.id) ? 'done' : unlocked(l.id) ? 'open' : 'locked'}">${levelDone(l.id) ? '✓ ' : unlocked(l.id) ? '' : '🔒 '}${l.name}</span>`).join('<i>→</i>')}</div>`;
 
 function home(){
   test = null; prac = null;
-  const passed = SUBJECTS.filter(s => progress.passed.includes(s)).length, weak = weakSpots().length;
+  const top = [...LEVELS].reverse().find(l => levelDone(l.id)), weak = weakSpots().length, gedN = GED_SUBJECTS.filter(s => progress.gedPassed.includes(s)).length;
+  const status = levelDone('GED') ? '🎓 You finished every level, including all four GED practice tests!'
+    : unlocked('GED') ? `You're certified through <b>8th grade</b>. GED level: <b>${gedN} of 4</b> subject tests passed.`
+    : top ? `You're certified through <b>${top.name}</b>.` : 'Prove what you know, one level at a time.';
   app.innerHTML = `
     <header class="board">
-      <h1>GED Prep</h1>
-      <p>${passed === SUBJECTS.length ? '🎓 You passed all four practice tests — you\'re ready to schedule the real GED!'
-        : passed ? `You've passed <b>${passed} of ${SUBJECTS.length}</b> GED practice tests.` : 'Learn and practice everything on the four GED tests.'}</p>
+      <h1>Grade Check</h1>
+      <p>${status}</p>
     </header>
+    ${ladder()}
     ${resumeCard()}
     <div class="modes">
-      <button class="mode" id="go-test"><div class="icon">📝</div><h2>Take a Practice Test</h2>
-        <p>A ${TEST_LEN}-question test for each GED subject with an estimated score. Get ${PASS}+ right (about 145) to pass.</p></button>
+      <button class="mode" id="go-test"><div class="icon">📝</div><h2>Take a Test</h2>
+        <p>Pass 7th grade to unlock 8th grade, and pass 8th grade to unlock the four GED tests.</p></button>
       <button class="mode" id="go-practice"><div class="icon">📚</div><h2>Practice &amp; Learn</h2>
-        <p>${weak ? `<b class="warn">${weak} weak spot${weak > 1 ? 's' : ''} to review.</b> ` : ''}Every GED topic, with a quick lesson and unlimited practice.</p></button>
+        <p>${weak ? `<b class="warn">${weak} weak spot${weak > 1 ? 's' : ''} to review.</b> ` : ''}Every topic for 7th grade, 8th grade, and the GED, with lessons and unlimited practice.</p></button>
     </div>
-    <div class="subject-strip">${SUBJECTS.map(s => `<span class="${progress.passed.includes(s) ? 'done' : ''}">${GED[s].icon} ${GED[s].name}${progress.passed.includes(s) ? ' ✓' : ''}</span>`).join('')}</div>
-    <p class="disclaimer">Unofficial study tool — not affiliated with GED Testing Service. Scores are rough estimates, not official GED scores.</p>`;
+    <p class="disclaimer">Unofficial study tool — not affiliated with GED Testing Service. GED scores shown are rough estimates.</p>`;
   document.getElementById('go-test').onclick = testHome;
-  document.getElementById('go-practice').onclick = practiceHome;
+  document.getElementById('go-practice').onclick = () => practiceHome();
   bindCommon();
 }
 
 function testHome(){
   test = null; prac = null;
-  const allDone = SUBJECTS.every(s => progress.passed.includes(s));
+  const gedN = GED_SUBJECTS.filter(s => progress.gedPassed.includes(s)).length;
   app.innerHTML = `
     <div class="topbar"><button class="link" id="back">← Home</button></div>
-    <h1 class="page-title">📝 GED Practice Tests</h1>
-    <div class="card"><p class="rules">The real GED is four separate tests, and you need a <b>145</b> or higher on each one to pass.
-      Each practice test here has ${TEST_LEN} random questions, balanced across topics like the real test. Get <b>${PASS} right</b> (about 145) to pass.
-      Miss ${MAX_MISSES + 1} and the test ends — you'll see every mistake with how to fix it, then try a fresh test.</p></div>
-    ${allDone ? '<div class="card result-head pass"><p><b>🎓 All four passed!</b> You\'re scoring in the passing range on every subject. Keep practicing weak spots, then schedule the real test.</p></div>' : ''}
+    <h1 class="page-title">📝 Tests</h1>
+    <div class="card"><p class="rules">Start with 7th grade. Each grade test has ${GRADE_SPEC.len} random questions — ${GRADE_SPEC.perSubject} each of Math, English, Science, and Social Studies.
+      Get <b>${GRADE_SPEC.pass} right</b> to be certified and unlock the next level. Miss ${GRADE_SPEC.len - GRADE_SPEC.pass + 1} and the test ends — you'll see every mistake with how to fix it, then try a brand-new test.
+      After 8th grade comes the <b>GED</b>: four separate subject tests, just like the real thing.</p></div>
     ${resumeCard()}
-    <div class="grades">${SUBJECTS.map(s => {
-      const done = progress.passed.includes(s);
-      return `<div class="card grade ${done ? 'done' : 'ready'}">
-        <div class="num">${GED[s].icon}</div>
-        <div class="info"><h3>${GED[s].name}</h3>
-          <small>${done ? `Passed ✓ · best estimated score ${progress.best[s]} (${band(progress.best[s])})` : `${GED[s].topics.length} topics · the real test is ${GED[s].minutes} minutes`}</small></div>
-        <button class="${done ? '' : 'primary'}" data-start="${s}">${done ? 'Retake' : 'Start'}</button>
-      </div>`; }).join('')}
+    <div class="grades">${LEVELS.map(l => {
+      const done = levelDone(l.id), open = unlocked(l.id), cls = done ? 'done' : open ? 'ready' : 'locked';
+      if (l.kind === 'grade'){
+        const status = done ? `Certified ✓ · best ${progress.best[l.id]}/${GRADE_SPEC.len}` : open ? 'Ready to test' : `🔒 Pass ${LEVELS[LEVELS.indexOf(l) - 1].short} to unlock`;
+        return `<div class="card grade ${cls}"><div class="num">${l.id}</div>
+          <div class="info"><h3>${l.name}</h3><small>${status}</small></div>
+          <button class="${open && !done ? 'primary' : ''}" data-start="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Retake' : 'Start'}</button></div>`;
+      }
+      const status = done ? 'All four subject tests passed ✓' : open ? `${gedN} of 4 subject tests passed` : '🔒 Pass 8th grade to unlock';
+      return `<div class="card grade ${cls}"><div class="num">🎓</div>
+        <div class="info"><h3>GED</h3><small>${status}</small></div>
+        <button class="${open && !done ? 'primary' : ''}" id="open-ged" ${open ? '' : 'disabled'}>${open ? 'Open' : 'Locked'}</button></div>`;
+    }).join('')}
     </div>
     <p style="text-align:center;margin-top:18px"><button class="link" id="reset">Reset progress</button></p>`;
   app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => {
     if (progress.current && !confirm('Starting a new test throws away the one in progress. Continue?')) return;
     start(b.dataset.start);
   });
-  document.getElementById('reset').onclick = () => { if (confirm('Erase all test results, question history, and practice stats?')){ progress = fresh(); save(); testHome(); } };
+  document.getElementById('open-ged').onclick = gedTestsPage;
+  document.getElementById('reset').onclick = () => { if (confirm('Erase all certifications, test results, question history, and practice stats?')){ progress = fresh(); save(); testHome(); } };
   bindCommon(home);
 }
 
-function start(s){
-  test = { subject: s, qs: buildTest(s), i: 0, right: 0, misses: [], locked: false };
+function gedTestsPage(){
+  test = null; prac = null;
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← All tests</button></div>
+    <h1 class="page-title">🎓 GED Practice Tests</h1>
+    <div class="card"><p class="rules">The real GED is four separate tests, and you need a <b>145</b> or higher on each one to pass.
+      Each practice test here has ${GED_SPEC.len} random questions, balanced across topics like the real test. Get <b>${GED_SPEC.pass} right</b> (about 145) to pass.
+      Miss ${GED_SPEC.len - GED_SPEC.pass + 1} and the test ends — you'll see every mistake with how to fix it.</p></div>
+    ${levelDone('GED') ? '<div class="card result-head pass"><p><b>🎓 All four passed!</b> You\'re scoring in the passing range on every subject. Keep practicing weak spots, then schedule the real test.</p></div>' : ''}
+    ${resumeCard()}
+    <div class="grades">${GED_SUBJECTS.map(s => {
+      const done = progress.gedPassed.includes(s);
+      return `<div class="card grade ${done ? 'done' : 'ready'}">
+        <div class="num">${GED[s].icon}</div>
+        <div class="info"><h3>${GED[s].name}</h3>
+          <small>${done ? `Passed ✓ · best estimated score ${progress.gedBest[s]} (${band(progress.gedBest[s])})` : `${GED[s].topics.length} topics · the real test is ${GED[s].minutes} minutes`}</small></div>
+        <button class="${done ? '' : 'primary'}" data-ged="${s}">${done ? 'Retake' : 'Start'}</button>
+      </div>`; }).join('')}
+    </div>`;
+  app.querySelectorAll('[data-ged]').forEach(b => b.onclick = () => {
+    if (progress.current && !confirm('Starting a new test throws away the one in progress. Continue?')) return;
+    start('GED', b.dataset.ged);
+  });
+  bindCommon(testHome);
+}
+
+function start(level, subject = null){
+  test = { level, subject, qs: buildTest(level, subject), i: 0, right: 0, misses: [], locked: false };
   progress.current = test; save();
   showQuestion();
 }
 
 function showQuestion(){
-  const t = test, q = t.qs[t.i];
+  const t = test, q = t.qs[t.i], spec = specOf(t), grade = LEVEL[t.level].kind === 'grade';
   t.locked = false;
   app.innerHTML = `
-    <div class="topbar"><span><b>${GED[t.subject].icon} ${GED[t.subject].name}</b></span><span>Question ${t.i + 1} of ${TEST_LEN}</span>
-      <span>Misses: ${t.misses.length} / ${MAX_MISSES} allowed</span>
+    <div class="topbar"><span><b>${grade ? '' : GED[t.subject].icon + ' '}${testTitle(t)}</b></span><span>Question ${t.i + 1} of ${spec.len}</span>
+      <span>Misses: ${t.misses.length} / ${maxMisses(t)} allowed</span>
       <button class="link" id="quit">Save &amp; exit</button></div>
-    <div class="bar"><i style="width:${t.i / TEST_LEN * 100}%"></i></div>
+    <div class="bar"><i style="width:${t.i / spec.len * 100}%"></i></div>
     <div class="card">
-      <span class="tag">${esc(q.topicName)}</span>
+      <span class="tag">${grade ? `${q.subject} · ` : ''}${esc(q.topicName)}</span>
       ${qHtml(q.q)}
       <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
     </div>`;
@@ -2983,125 +3061,155 @@ function answer(k){
   if (chosen === q.answer) t.right++;
   else {
     t.misses.push({ ...q, chosen });
-    tstat(topicKey(t.subject, q.topic)).miss++;
+    tstat(topicKey(t.level, q.subject, q.topic)).miss++;
   }
   setTimeout(() => {
     if (test !== t) return;
     t.i++;
-    if (t.misses.length > MAX_MISSES || t.i === TEST_LEN) return results();
-    if (t.i % 10 === 0) Sound.milestone();   // a little chime every 10 questions
+    if (t.misses.length > maxMisses(t) || t.i === specOf(t).len) return results();
+    if (t.i % (LEVEL[t.level].kind === 'grade' ? 25 : 10) === 0) Sound.milestone();
     save(); showQuestion();
   }, 260);
 }
 
 function results(){
-  const t = test, name = GED[t.subject].name, passed = t.i === TEST_LEN && t.right >= PASS, score = estScore(t.right, TEST_LEN);
-  if (passed){
-    if (!progress.passed.includes(t.subject)) progress.passed.push(t.subject);
-    progress.best[t.subject] = Math.max(progress.best[t.subject] || 0, score);
+  const t = test, L = LEVEL[t.level], spec = specOf(t), passed = t.i === spec.len && t.right >= spec.pass;
+  let head;
+  if (L.kind === 'grade'){
+    const next = LEVELS[LEVELS.indexOf(L) + 1];
+    if (passed){
+      if (!progress.certified.includes(L.id)) progress.certified.push(L.id);
+      progress.best[L.id] = Math.max(progress.best[L.id] || 0, t.right);
+    }
+    head = passed
+      ? `<div class="card result-head pass"><div class="big">🎓</div>
+          <h2>${L.name} Certified!</h2>
+          <p>You scored <b>${t.right}/${spec.len}</b>. You know everything you need to know in ${L.short}.</p>
+          <div class="actions"><button class="primary" id="next">${next.kind === 'grade' ? `Start ${next.name} →` : 'Go to the GED tests →'}</button>
+            <button id="home">All tests</button></div></div>`
+      : `<div class="card result-head fail"><div class="big">📝</div>
+          <h2>Not ${L.short} level yet</h2>
+          <p>You missed ${t.misses.length} questions (${t.right} right out of ${t.i} answered), so this test is over.
+            Study the fixes below, then take a new test with different questions.</p>
+          <div class="actions"><button class="primary" id="retry">Take a new randomized test</button><button id="study">Study weak spots</button><button id="home">All tests</button></div></div>`;
+  } else {
+    const name = GED[t.subject].name, score = estScore(t.right, spec.len);
+    if (passed){
+      if (!progress.gedPassed.includes(t.subject)) progress.gedPassed.push(t.subject);
+      progress.gedBest[t.subject] = Math.max(progress.gedBest[t.subject] || 0, score);
+    }
+    const nextS = GED_SUBJECTS.find(s => !progress.gedPassed.includes(s));
+    const byTopic = {};
+    t.misses.forEach(m => byTopic[m.topicName] = (byTopic[m.topicName] || 0) + 1);
+    const focus = Object.entries(byTopic).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, c]) => `${esc(n)} (${c} missed)`).join(', ');
+    head = passed
+      ? `<div class="card result-head pass"><div class="big">🎓</div>
+          <h2>You passed GED ${name}!</h2>
+          <p>You got <b>${t.right}/${spec.len}</b> — an estimated score of <b>${score}</b> (${band(score)}).</p>
+          ${nextS ? '' : '<p><b>That\'s all four GED subjects — you\'re ready to schedule the real GED!</b></p>'}
+          <div class="actions">${nextS ? `<button class="primary" id="next">Next: ${GED[nextS].name} →</button>` : ''}
+            <button id="home">GED tests</button></div></div>`
+      : `<div class="card result-head fail"><div class="big">📝</div>
+          <h2>Not passing yet</h2>
+          <p>You missed ${t.misses.length} questions (${t.right} right out of ${t.i} answered), so this test is over. A passing score needs ${spec.pass} of ${spec.len}.</p>
+          ${focus ? `<p>Focus on: <b>${focus}</b></p>` : ''}
+          <div class="actions"><button class="primary" id="retry">Take a new ${name} test</button><button id="study">Study weak spots</button><button id="home">GED tests</button></div></div>`;
+    t.nextS = nextS;
   }
   markSeen(t.qs.slice(0, t.i));
   progress.current = null;
   save();
   passed ? Sound.pass() : Sound.fail();
-  const nextS = SUBJECTS.find(s => !progress.passed.includes(s));
-  const byTopic = {};
-  t.misses.forEach(m => byTopic[m.topicName] = (byTopic[m.topicName] || 0) + 1);
-  const focus = Object.entries(byTopic).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, c]) => `${esc(n)} (${c} missed)`).join(', ');
-  const head = passed
-    ? `<div class="card result-head pass"><div class="big">🎓</div>
-        <h2>You passed ${name}!</h2>
-        <p>You got <b>${t.right}/${TEST_LEN}</b> — an estimated score of <b>${score}</b> (${band(score)}).</p>
-        ${nextS ? '' : '<p><b>That\'s all four subjects — you\'re ready to schedule the real GED!</b></p>'}
-        <div class="actions">${nextS ? `<button class="primary" id="next">Next: ${GED[nextS].name} →</button>` : ''}
-          <button id="home">All tests</button></div></div>`
-    : `<div class="card result-head fail"><div class="big">📝</div>
-        <h2>Not passing yet</h2>
-        <p>You missed ${t.misses.length} questions (${t.right} right out of ${t.i} answered), so this test is over. A passing score needs ${PASS} of ${TEST_LEN}.</p>
-        ${focus ? `<p>Focus on: <b>${focus}</b></p>` : ''}
-        <div class="actions"><button class="primary" id="retry">Take a new ${name} test</button><button id="study">Study weak spots</button><button id="home">All tests</button></div></div>`;
   const review = t.misses.length ? `
     <h2 class="section">${passed ? 'Still worth reviewing' : 'What you got wrong — and how to fix it'}</h2>
     ${t.misses.map(m => `<div class="card miss">
-      <span class="tag">${esc(m.topicName)}</span>
+      <span class="tag">${L.kind === 'grade' ? `${m.subject} · ` : ''}${esc(m.topicName)}</span>
       ${qHtml(m.q)}
       <div class="ans yours">✗ Your answer: ${esc(m.chosen)}</div>
       <div class="ans right">✓ Correct answer: ${esc(m.answer)}</div>
       <div class="fix"><b>How to fix it:</b> ${esc(m.explain)}</div>
-      <button class="link learn" data-learn="${m.topic}">📚 Learn this topic: ${esc(m.topicName)} →</button>
+      <button class="link learn" data-learn="${m.subject}|${m.topic}">📚 Learn this topic: ${esc(m.topicName)} →</button>
     </div>`).join('')}
-    ${passed ? '' : `<div class="actions"><button class="primary" id="retry2">Take a new ${name} test</button></div>`}` : '';
+    ${passed ? '' : `<div class="actions"><button class="primary" id="retry2">Take a new randomized test</button></div>`}` : '';
   app.innerHTML = head + review;
   window.scrollTo(0, 0);
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
-  on('next', () => start(nextS)); on('home', testHome); on('study', practiceHome);
-  on('retry', () => start(t.subject)); on('retry2', () => start(t.subject));
-  app.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => { test = null; lesson(t.subject, b.dataset.learn); });
+  const again = () => start(t.level, t.subject);
+  if (L.kind === 'grade'){
+    const next = LEVELS[LEVELS.indexOf(L) + 1];
+    on('next', () => next.kind === 'grade' ? start(next.id) : gedTestsPage()); on('home', testHome);
+  } else {
+    on('next', () => start('GED', t.nextS)); on('home', gedTestsPage);
+  }
+  on('retry', again); on('retry2', again); on('study', () => practiceHome(t.level));
+  app.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => { test = null; const [s, id] = b.dataset.learn.split('|'); lesson(t.level, s, id); });
 }
 
 // ---------- practice & learn ----------
-function topicButton(s, t, showWhere){
-  const st = progress.topics[topicKey(s, t.id)], weak = st && st.miss - st.right / 2 > 0;
+function topicButton(level, s, t, showWhere){
+  const st = progress.topics[topicKey(level, s, t.id)], weak = st && st.miss - st.right / 2 > 0;
   const status = [weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ');
-  return `<button class="topic${weak ? ' weak' : ''}" data-topic="${s}|${t.id}">
-    ${showWhere ? `<small>${GED[s].icon} ${GED[s].short}</small>` : ''}<b>${esc(t.name)}</b><small>${status}</small></button>`;
+  return `<button class="topic${weak ? ' weak' : ''}" data-topic="${level}|${s}|${t.id}">
+    ${showWhere ? `<small>${LEVEL[level].name} · ${LEVEL[level].subjects[s].short}</small>` : ''}<b>${esc(t.name)}</b><small>${status}</small></button>`;
 }
 
-function practiceHome(){
-  test = null; prac = null;
-  const weak = weakSpots().slice(0, 6);
+function practiceHome(level = practiceLevel || [...LEVELS].reverse().find(l => unlocked(l.id)).id){
+  practiceLevel = level; test = null; prac = null;
+  const L = LEVEL[level], weak = weakSpots().slice(0, 6);
   app.innerHTML = `
     <div class="topbar"><button class="link" id="back">← Home</button></div>
     <h1 class="page-title">📚 Practice &amp; Learn</h1>
-    <p class="rules">Pick a GED subject, then a topic. Each topic has a quick lesson and unlimited practice. Practice never counts against your tests.</p>
+    <p class="rules">Pick a level and a subject, then a topic. Each topic has a quick lesson and unlimited practice. Practice never counts against your tests.</p>
     ${weak.length ? `<h2 class="section">⚠️ Your weak spots</h2>
-      <p class="rules">Topics you've missed on practice tests. Get practice questions right to clear them.</p>
-      <div class="topics">${weak.map(w => topicButton(w.s, findTopic(w.s, w.id), true)).join('')}</div>` : ''}
-    <div class="subjects">${SUBJECTS.map(s => {
-      const topics = GED[s].topics, stats = topics.map(t => progress.topics[topicKey(s, t.id)]).filter(Boolean);
+      <p class="rules">Topics you've missed on tests. Get practice questions right to clear them.</p>
+      <div class="topics">${weak.map(w => topicButton(w.level, w.s, findTopic(w.level, w.s, w.id), true)).join('')}</div>` : ''}
+    <div class="tabs">${LEVELS.map(l => `<button data-level="${l.id}" class="${l.id === level ? 'on' : ''}">${l.name}</button>`).join('')}</div>
+    <div class="subjects">${Object.keys(L.subjects).map(s => {
+      const S = L.subjects[s], stats = S.topics.map(t => progress.topics[topicKey(level, s, t.id)]).filter(Boolean);
       const right = stats.reduce((n, st) => n + st.right, 0), tries = stats.reduce((n, st) => n + st.tries, 0);
       const weakN = stats.filter(st => st.miss - st.right / 2 > 0).length;
       return `<button class="subject" data-subject="${s}">
-        <span class="icon">${GED[s].icon}</span>
-        <span class="info"><b>${GED[s].name}</b>
-          <small>${topics.length} topics · ${allItems(s).length} question types</small>
+        <span class="icon">${S.icon}</span>
+        <span class="info"><b>${S.name}</b>
+          <small>${S.topics.length} topics · ${typesIn(level, s)} question types</small>
           <small>${tries ? `${right}/${tries} right in practice` : 'Not practiced yet'}${weakN ? ` · <span class="warn">${weakN} weak spot${weakN > 1 ? 's' : ''}</span>` : ''}</small></span>
         <span class="chev">›</span></button>`; }).join('')}
     </div>`;
-  app.querySelectorAll('[data-subject]').forEach(b => b.onclick = () => subjectPage(b.dataset.subject));
-  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => { const [s, id] = b.dataset.topic.split('|'); lesson(s, id); });
+  app.querySelectorAll('[data-level]').forEach(b => b.onclick = () => practiceHome(b.dataset.level));
+  app.querySelectorAll('[data-subject]').forEach(b => b.onclick = () => subjectPage(level, b.dataset.subject));
+  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => { const [l, s, id] = b.dataset.topic.split('|'); lesson(l, s, id); });
   bindCommon(home);
 }
 
-function subjectPage(s){
-  prac = null;
-  const totalW = GED[s].topics.reduce((n, t) => n + t.w, 0);
+function subjectPage(level, s){
+  practiceLevel = level; prac = null;
+  const L = LEVEL[level], S = L.subjects[s], totalW = S.topics.reduce((n, t) => n + t.w, 0);
   app.innerHTML = `
     <div class="topbar"><button class="link" id="back">← All subjects</button></div>
-    <h1 class="page-title">${GED[s].icon} ${GED[s].name}</h1>
-    <p class="rules">${esc(GED[s].about)}</p>
-    <button class="mix" id="mix"><b>🔀 Practice all of ${GED[s].short}</b><small>Mixed questions from every topic below</small></button>
+    <h1 class="page-title">${S.icon} ${S.name} <small class="grade-note">${L.name}</small></h1>
+    ${S.about ? `<p class="rules">${esc(S.about)}</p>` : ''}
+    <button class="mix" id="mix"><b>🔀 Practice all of ${S.short}</b><small>Mixed questions from every topic below</small></button>
     <h2 class="section">Topics</h2>
-    <div class="topic-list">${GED[s].topics.map(t => {
-      const st = progress.topics[topicKey(s, t.id)], weak = st && st.miss - st.right / 2 > 0;
-      return `<button class="topic wide${weak ? ' weak' : ''}" data-topic="${s}|${t.id}">
+    <div class="topic-list">${S.topics.map(t => {
+      const st = progress.topics[topicKey(level, s, t.id)], weak = st && st.miss - st.right / 2 > 0;
+      return `<button class="topic wide${weak ? ' weak' : ''}" data-topic="${t.id}">
         <b>${esc(t.name)}</b>
         <span class="covers">${esc(t.covers)}</span>
-        <small>≈${Math.round(t.w / totalW * 100)}% of the practice test · ${t.items.length} question types · ${[weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ')}</small>
+        <small>${L.kind === 'ged' ? `≈${Math.round(t.w / totalW * 100)}% of the test · ` : ''}${t.items.length} question types · ${[weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ')}</small>
       </button>`; }).join('')}
     </div>`;
-  document.getElementById('mix').onclick = () => { prac = { s, id: null, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
-  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => lesson(s, b.dataset.topic.split('|')[1]));
-  bindCommon(practiceHome);
+  document.getElementById('mix').onclick = () => { prac = { level, s, id: null, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
+  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => lesson(level, s, b.dataset.topic));
+  bindCommon(() => practiceHome(level));
 }
 
-function lesson(s, id){
+function lesson(level, s, id){
   prac = null;
-  const t = findTopic(s, id);
+  const L = LEVEL[level], S = L.subjects[s], t = findTopic(level, s, id);
   app.innerHTML = `
-    <div class="topbar"><button class="link" id="back">← ${GED[s].short} topics</button></div>
+    <div class="topbar"><button class="link" id="back">← ${S.short} topics</button></div>
     <div class="card lesson">
-      <span class="tag">GED ${GED[s].name}</span>
+      <span class="tag">${L.name} · ${S.name}</span>
       <h1>${esc(t.name)}</h1>
       <p class="covers">Covers: ${esc(t.covers)}</p>
       <p class="intro">${esc(t.intro)}</p>
@@ -3111,22 +3219,23 @@ function lesson(s, id){
       <div class="example"><div class="prob">${esc(t.ex[0])}</div><div>${esc(t.ex[1])}</div></div>
       <div class="actions"><button class="primary" id="practice">Practice this topic →</button></div>
     </div>`;
-  document.getElementById('practice').onclick = () => { prac = { s, id, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
-  bindCommon(() => subjectPage(s));
+  document.getElementById('practice').onclick = () => { prac = { level, s, id, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
+  bindCommon(() => subjectPage(level, s));
 }
 
-// Practice one topic (p.id) or, when p.id is null, a mix of the whole subject.
+// Practice one topic (p.id) or, when p.id is null, a mix of the whole subject (topics weighted by how many question types they have).
 function nextPractice(){
-  const p = prac, t = p.id && findTopic(p.s, p.id), items = t ? t.items : allItems(p.s);
-  let q, it;
+  const p = prac, S = LEVEL[p.level].subjects[p.s], t = p.id && findTopic(p.level, p.s, p.id);
+  let q;
   for (let i = 0; i < 20; i++){   // avoid showing the exact same question twice in a row
-    it = pick(items);
-    q = makeQ(findTopic(p.s, it.ged), it);
+    let topic = t;
+    if (!topic){ let r = Math.random() * S.topics.reduce((n, x) => n + x.items.length, 0); topic = S.topics.find(x => (r -= x.items.length) < 0) || S.topics[0]; }
+    q = makeQ(p.s, topic, pick(topic.items));
     if (q.key !== p.last) break;
   }
   p.q = q; p.last = q.key; p.answered = false;
   app.innerHTML = `
-    <div class="topbar"><button class="link" id="back">← ${t ? 'Lesson' : 'Topics'}</button><span><b>${t ? esc(t.name) : `All of ${GED[p.s].short}`}</b></span><span id="pstats"></span></div>
+    <div class="topbar"><button class="link" id="back">← ${t ? 'Lesson' : 'Topics'}</button><span><b>${t ? esc(t.name) : `All of ${S.short}`}</b></span><span id="pstats"></span></div>
     <div class="card">
       <span class="tag">Practice · ${esc(q.topicName)}</span>
       ${qHtml(q.q)}
@@ -3135,14 +3244,14 @@ function nextPractice(){
     </div>`;
   drawPracticeStats();
   app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => practiceAnswer(+b.dataset.k));
-  bindCommon(() => p.id ? lesson(p.s, p.id) : subjectPage(p.s));
+  bindCommon(() => p.id ? lesson(p.level, p.s, p.id) : subjectPage(p.level, p.s));
 }
 const drawPracticeStats = () => { document.getElementById('pstats').textContent = `🔥 Streak ${prac.streak} · ${prac.right}/${prac.total} right`; };
 
 function practiceAnswer(k){
   const p = prac; if (!p || p.answered) return;
   p.answered = true;
-  const q = p.q, ok = q.choices[k] === q.answer, st = tstat(topicKey(p.s, q.topic));
+  const q = p.q, ok = q.choices[k] === q.answer, st = tstat(topicKey(p.level, p.s, q.topic));
   p.total++; st.tries++;
   if (ok){ p.right++; p.streak++; st.right++; p.streak % 5 === 0 ? Sound.milestone() : Sound.right(); }
   else { p.streak = 0; Sound.wrong(); }
