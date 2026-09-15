@@ -34,7 +34,11 @@ Progress lives in `localStorage` key `gradecheck.v1` (`certified`, `best`, `seen
 
 ## Adding content
 
-- New question type: push a generator onto `BANK[g][subject]`, then add its index to a topic's `items`.
+- New questions: call `addTo(grade, subject, topicId, ...generatorsOrRows)` in a `<script>` placed after the
+  `LESSONS`/`COVERS` scripts. It pushes onto the bank AND registers the index with the topic — no manual
+  index bookkeeping. Helpers: `both(rows, fwd, back)` asks a two-column table in either direction; `cap`, `aan`.
+- Each topic's one-line "Covers:" text lives in `COVERS[grade][subject][topicId]`.
+- Practice flow: Practice home (grade tabs + subject cards) → subject page (topics + "Practice all" mix) → lesson → practice.
 - New grade: add `BANK[9]` and `LESSONS[9]` with all four subjects — `GRADES` is derived from `BANK`.
 - Sanity check in the browser console: build ~100 tests with `buildTest(g)` and assert every question
   has ≥3 unique choices including the answer, and every bank item has a `.topic`.
