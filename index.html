@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grade Check</title>
+<style>
+  /* One dim, low-glare palette in every mode: muted slate, softened text, desaturated accents. */
+  :root{
+    color-scheme: dark;
+    --bg:#191c22; --card:#20242c; --ink:#c9ced8; --muted:#848c9a; --line:#2f3540;
+    --accent:#5c79c4; --accent-ink:#e6ebf5; --good:#6aa983; --good-bg:#1e2c24;
+    --bad:#c97d72; --bad-bg:#2f2322; --gold:#c49a52; --board:#1b2b23; --chalk:#c8d0c3;
+    --frame:#5a4130; --frame-shadow:#3b2a1f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:24px 16px 64px}
+  header.board{background:var(--board);color:var(--chalk);border-radius:14px;padding:22px 24px;margin-bottom:22px;
+    border:6px solid var(--frame);box-shadow:0 4px 0 var(--frame-shadow)}
+  header.board h1{margin:0;font-size:1.9rem;letter-spacing:.5px;font-family:"Segoe Print","Comic Sans MS",cursive}
+  header.board p{margin:6px 0 0;opacity:.85}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:14px}
+  .grades{display:grid;gap:12px}
+  .grade{display:flex;align-items:center;gap:16px}
+  .grade .num{flex:0 0 64px;height:64px;border-radius:12px;display:grid;place-items:center;font-size:1.6rem;font-weight:800;
+    background:var(--bg);border:2px solid var(--line)}
+  .grade.done .num{background:var(--good-bg);border-color:var(--good);color:var(--good)}
+  .grade.ready .num{border-color:var(--accent);color:var(--accent)}
+  .grade.locked{opacity:.55}
+  .grade .info{flex:1;min-width:0}
+  .grade h3{margin:0;font-size:1.15rem}
+  .grade small{color:var(--muted)}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 16px;
+    transition:transform .07s ease, border-color .15s, background-color .15s}
+  button:active:not(:disabled){transform:scale(.97)}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+  .mute{position:fixed;bottom:14px;right:14px;z-index:10;width:42px;height:42px;padding:0;border-radius:50%;font-size:1.15rem;opacity:.8}
+  .mute:hover{opacity:1}
+  button:disabled{cursor:not-allowed;opacity:.6}
+  button.link{border:none;background:none;color:var(--muted);text-decoration:underline;padding:4px}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;color:var(--muted);font-size:.95rem}
+  .bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:18px}
+  .bar>i{display:block;height:100%;background:var(--accent);transition:width .25s}
+  .tag{display:inline-block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:3px 9px;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--muted)}
+  .q{font-size:1.25rem;font-weight:600;margin:12px 0 18px;white-space:pre-line}
+  .choices{display:grid;gap:10px}
+  .choices button{text-align:left;padding:14px 16px;display:flex;gap:12px;align-items:center}
+  .choices button:hover:not(:disabled){border-color:var(--accent)}
+  .choices button.picked{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--card))}
+  .choices kbd{flex:0 0 26px;height:26px;border-radius:6px;display:grid;place-items:center;background:var(--bg);border:1px solid var(--line);font:700 .85rem system-ui}
+  .result-head{text-align:center;padding:28px 20px}
+  .result-head .big{font-size:3rem;line-height:1}
+  .result-head h2{margin:10px 0 6px;font-size:1.6rem}
+  .result-head.pass{border-color:var(--good);background:var(--good-bg)}
+  .result-head.fail{border-color:var(--bad);background:var(--bad-bg)}
+  .actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+  .miss .q{font-size:1.05rem;margin:8px 0 12px}
+  .ans{padding:8px 12px;border-radius:8px;margin:6px 0}
+  .ans.yours{background:var(--bad-bg);color:var(--bad)}
+  .ans.right{background:var(--good-bg);color:var(--good)}
+  .fix{margin-top:10px;padding:12px 14px;border-left:4px solid var(--gold);background:var(--bg);border-radius:6px;white-space:pre-line}
+  .fix b{color:var(--gold)}
+  h2.section{font-size:1.1rem;margin:26px 0 12px}
+  .page-title{font-size:1.7rem;margin:4px 0 12px}
+  .warn{color:var(--bad)}
+  /* home: two big mode buttons */
+  .modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  button.mode{display:block;width:100%;text-align:left;padding:24px 22px;border-radius:14px}
+  button.mode:hover{border-color:var(--accent)}
+  .mode .icon{font-size:2.2rem;line-height:1}
+  .mode h2{margin:12px 0 6px;font-size:1.35rem}
+  .mode p{margin:0;color:var(--muted)}
+  /* practice */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 4px}
+  .tabs button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+  .topics{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+  button.topic{text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+  button.topic:hover{border-color:var(--accent)}
+  button.topic.weak{border-color:color-mix(in srgb,var(--bad) 60%,var(--line))}
+  .topic small{color:var(--muted);font-size:.82rem}
+  .lesson h1{margin:10px 0 8px;font-size:1.6rem}
+  .lesson h3{margin:20px 0 8px;font-size:1rem;color:var(--gold)}
+  .lesson .intro{font-size:1.05rem;margin:0}
+  .points{margin:0;padding-left:22px}
+  .points li{margin:8px 0}
+  .example{border-left:4px solid var(--accent);background:var(--bg);padding:12px 14px;border-radius:6px}
+  .example .prob{font-weight:600;margin-bottom:6px}
+  .choices button.correct{border-color:var(--good);background:var(--good-bg);color:var(--good)}
+  .choices button.wrong{border-color:var(--bad);background:var(--bad-bg);color:var(--bad)}
+  .choices button:disabled{opacity:1;cursor:default}
+  #feedback .ans{margin-top:14px}
+  .learn{margin-top:10px;text-align:left}
+  .rules{color:var(--muted);font-size:.95rem;margin:0}
+  @media (max-width:480px){ header.board h1{font-size:1.5rem} .grade .num{flex-basis:52px;height:52px;font-size:1.3rem} }
+</style>
+</head>
+<body>
+<button class="mute" id="mute" title="Sound on/off" aria-label="Sound on/off">🔊</button>
+<div class="wrap" id="app"></div>
+
+<script>
+// ---------- helpers shared by the question banks ----------
+const R = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const nz = (a, b) => { let v; do v = R(a, b); while (v === 0); return v; };
+const fmt = x => Number.isInteger(x) ? String(x) : String(+x.toFixed(2));
+const sgn = x => x < 0 ? `(${x})` : String(x);           // wrap negatives in parens
+// Build a multiple-choice question. Numeric answers get auto-filled distractors if needed.
+function MQ(q, correct, wrongs, explain){
+  const c = String(correct), seen = new Set([c]), w = [];
+  for (const x of wrongs){ const s = String(x); if (!seen.has(s) && w.length < 3){ seen.add(s); w.push(s); } }
+  // Not enough distinct wrong answers: nudge the first number in the correct answer ("$55" → "$61", "2/5" → "3/5").
+  const m = c.match(/-?\d+(\.\d+)?/);
+  if (m){
+    const n = +m[0], plain = m[0] === c, step = plain ? 1 : Math.max(1, Math.round(Math.abs(n) * 0.1));
+    for (let d = 1; w.length < 3 && d < 50; d++)
+      for (const v of [n + d * step, n - d * step]){
+        if (!plain && n >= 0 && v < 0) continue;
+        const s = c.slice(0, m.index) + fmt(v) + c.slice(m.index + m[0].length);
+        if (!seen.has(s) && w.length < 3){ seen.add(s); w.push(s); }
+      }
+  }
+  return { q, answer: c, choices: shuffle([c, ...w]), explain };
+}
+// Fact-table generator: pick a random row [key, answer, note]; wrong choices come from other rows' answers.
+// make(row) returns { q, explain }. Rows sharing the same answer are never used as distractors.
+function fromTable(rows, make){
+  const row = pick(rows);
+  const wrongs = shuffle([...new Set(rows.map(r => r[1]).filter(a => a !== row[1]))]);
+  const { q, explain } = make(row);
+  return MQ(q, row[1], wrongs, explain);
+}
+// Classification generator: groups = { label: [items...] }. Asks which item belongs to a random label.
+function fromGroups(groups, make){
+  const labels = Object.keys(groups), label = pick(labels), item = pick(groups[label]);
+  const others = shuffle(labels.filter(l => l !== label).flatMap(l => groups[l]));
+  const { q, explain } = make(label, item);
+  return MQ(q, item, others, explain);
+}
+// Reverse: show an item, ask which label it belongs to (for tables with 2-4 labels, fills wrongs from all labels).
+function whichGroup(groups, make){
+  const labels = Object.keys(groups), label = pick(labels), item = pick(groups[label]);
+  const { q, explain } = make(label, item);
+  return MQ(q, label, labels.filter(l => l !== label), explain);
+}
+const BANK = {};
+</script>
+
+<script>
+// ================= 7th GRADE =================
+BANK[7] = {
+  Math: [
+    () => { const a = nz(-12, 12), b = nz(-12, 12), s = a + b;
+      return MQ(`What is ${a} + ${sgn(b)}?`, s, [a - b, -s, Math.abs(a) + Math.abs(b)],
+        `Adding a negative is the same as subtracting. Same signs: add and keep the sign. Different signs: subtract the smaller absolute value from the larger and keep the sign of the larger. ${a} + ${sgn(b)} = ${s}.`); },
+    () => { const a = nz(-9, 9), b = nz(-9, 9), p = a * b;
+      return MQ(`What is ${a} × ${sgn(b)}?`, p, [-p, a + b, Math.abs(p) === p ? p + a : -p + b],
+        `Multiply the numbers, then fix the sign: same signs → positive, different signs → negative. ${Math.abs(a)} × ${Math.abs(b)} = ${Math.abs(p)}, and the signs are ${(a < 0) === (b < 0) ? 'the same, so it is positive' : 'different, so it is negative'}: ${p}.`); },
+    () => { const x = R(-8, 12), a = R(2, 9), b = nz(-15, 15), c = a * x + b;
+      return MQ(`Solve for x:  ${a}x ${b < 0 ? '−' : '+'} ${Math.abs(b)} = ${c}`, x, [(c + b) / a | 0, x + 2, -x, c - b],
+        `Undo operations in reverse order. First ${b < 0 ? `add ${-b} to` : `subtract ${b} from`} both sides: ${a}x = ${c - b}. Then divide both sides by ${a}: x = ${x}. Check: ${a}(${x}) ${b < 0 ? '−' : '+'} ${Math.abs(b)} = ${c} ✓`); },
+    () => { const pct = pick([10, 15, 20, 25, 30, 40, 50, 75]), base = R(2, 20) * 20, ans = base * pct / 100;
+      return MQ(`What is ${pct}% of ${base}?`, fmt(ans), [fmt(base * pct / 10), fmt(base - ans), fmt(ans + pct)],
+        `"Percent" means "out of 100", so ${pct}% = ${pct / 100}. "Of" means multiply: ${pct / 100} × ${base} = ${fmt(ans)}.`); },
+    () => { const price = R(4, 30) * 5, off = pick([10, 20, 25, 30, 40, 50]), sale = price * (100 - off) / 100;
+      return MQ(`A $${price} jacket is ${off}% off. What is the sale price?`, '$' + fmt(sale), ['$' + fmt(price * off / 100), '$' + fmt(price > off ? price - off : price + off), '$' + fmt(price + price * off / 100)],
+        `Find the discount, then subtract it. ${off}% of $${price} = ${off / 100} × ${price} = $${fmt(price * off / 100)}. Sale price = $${price} − $${fmt(price * off / 100)} = $${fmt(sale)}. (Shortcut: pay ${100 - off}% → ${(100 - off) / 100} × ${price}.)`); },
+    () => { const unit = pick([2, 3, 4, 5, 6, 8]), n = R(3, 9), cost = unit * n, m = R(10, 15);
+      return MQ(`${n} notebooks cost $${cost}. At that rate, how much do ${m} notebooks cost?`, '$' + unit * m, ['$' + (cost + m - n), '$' + (cost + m), '$' + unit * (m - 1)],
+        `Find the unit rate first: $${cost} ÷ ${n} = $${unit} per notebook. Then multiply by how many you want: $${unit} × ${m} = $${unit * m}.`); },
+    () => { const r = R(2, 10), area = +(3.14 * r * r).toFixed(2);
+      return MQ(`What is the area of a circle with radius ${r} cm? (Use π ≈ 3.14)`, fmt(area) + ' cm²', [fmt(+(2 * 3.14 * r).toFixed(2)) + ' cm²', fmt(+(3.14 * 2 * r * 2 * r).toFixed(2)) + ' cm²', fmt(+(3.14 * r).toFixed(2)) + ' cm²'],
+        `Area of a circle is A = πr² — square the radius first, then multiply by π. ${r}² = ${r * r}, and 3.14 × ${r * r} = ${fmt(area)} cm². (2πr is the circumference, not the area.)`); },
+    () => { const a = R(2, 9), b = R(2, 9), c = R(1, 9), d = R(1, 9);
+      return MQ(`Simplify:  ${a}x + ${c} + ${b}x + ${d}`, `${a + b}x + ${c + d}`, [`${a + b + c + d}x`, `${a * b}x + ${c + d}`, `${a + b}x + ${c * d}`],
+        `Combine like terms — x-terms with x-terms, plain numbers with plain numbers. ${a}x + ${b}x = ${a + b}x and ${c} + ${d} = ${c + d}, so the answer is ${a + b}x + ${c + d}. You can't add ${a + b}x and ${c + d} together because one has an x and one doesn't.`); },
+    () => { const red = R(2, 8), blue = R(2, 8), green = R(1, 6), tot = red + blue + green;
+      return MQ(`A bag has ${red} red, ${blue} blue, and ${green} green marbles. What is the probability of picking a blue marble?`, `${blue}/${tot}`, [`${blue}/${red + green}`, `1/3`, `${red}/${tot}`],
+        `Probability = (favorable outcomes) ÷ (total outcomes). There are ${blue} blue marbles out of ${red} + ${blue} + ${green} = ${tot} total, so P(blue) = ${blue}/${tot}.`); },
+    () => { const a = R(2, 6), b = R(3, 9), k = R(2, 5);
+      return MQ(`Solve the proportion:  ${a}/${b} = x/${b * k}`, a * k, [a + b * k - b, b * k / a | 0, a * b],
+        `Figure out what the bottom was multiplied by: ${b} × ${k} = ${b * k}. Do the same to the top: ${a} × ${k} = ${a * k}. (Or cross-multiply: ${b}x = ${a} × ${b * k}, so x = ${a * k}.)`); },
+  ],
+  English: [
+    ['Which sentence uses "their" correctly?', 'The students forgot their homework.', ['Their going to the park later.', 'Put the box over their.', 'I think their right about that.'], '"Their" shows ownership (their homework). "There" is a place ("over there"), and "they\'re" means "they are". Test it: if you can swap in "they are", use they\'re.'],
+    ['What is the theme of a story?', 'The central message or lesson about life', ['The order of events in the plot', 'The time and place of the story', 'The main character\'s name'], 'Theme is the big idea the author wants you to understand about life, like "honesty matters." Plot is what happens, setting is where/when. State a theme as a full sentence, not one word.'],
+    ['Which word is an adverb in: "She quickly finished her test"?', 'quickly', ['finished', 'test', 'her'], 'Adverbs describe verbs, adjectives, or other adverbs — they tell how, when, where, or how much. "Quickly" tells HOW she finished. Many adverbs end in -ly.'],
+    ['"The wind whispered through the trees." This is an example of:', 'Personification', ['Simile', 'Hyperbole', 'Alliteration'], 'Personification gives human actions to non-human things — wind can\'t really whisper. A simile compares using "like" or "as"; hyperbole is extreme exaggeration; alliteration repeats starting sounds.'],
+    ['Which is a complete sentence (not a fragment)?', 'After school, we walked home.', ['After school walking home.', 'Because we walked home.', 'Walked home after school.'], 'A complete sentence needs a subject AND a verb AND a complete thought. "Because we walked home" has both but leaves you hanging — "because" makes it a dependent clause. "We walked home" is complete.'],
+    ['What does the prefix "mis-" mean in "misunderstand"?', 'wrongly', ['again', 'before', 'not able'], '"Mis-" means wrongly or badly: misunderstand = understand wrongly, misspell = spell wrongly. "Re-" means again, "pre-" means before.'],
+    ['Which sentence uses a comma correctly?', 'I wanted to go, but it was raining.', ['I wanted, to go but it was raining.', 'I wanted to go but, it was raining.', 'I, wanted to go but it was raining.'], 'When a conjunction (and, but, or, so) joins two complete sentences, put the comma BEFORE the conjunction: "I wanted to go, but it was raining."'],
+    ['A story told using "I" and "me" by a character in the story is written in:', 'First-person point of view', ['Third-person limited', 'Third-person omniscient', 'Second-person point of view'], 'First person = the narrator is a character using I/me/we. Third person uses he/she/they and the narrator is outside the story. Second person uses "you."'],
+    ['What is the main purpose of a persuasive essay?', 'To convince the reader to agree with an opinion', ['To entertain with a made-up story', 'To explain how to do something', 'To describe a person\'s life'], 'Persuasive (argumentative) writing takes a side and backs it with reasons and evidence. Look for opinion words like "should" and "must."'],
+    ['Which word is a synonym for "enormous"?', 'huge', ['tiny', 'strange', 'loud'], 'Synonyms have the same or similar meaning. Enormous = huge. Antonyms are opposites (enormous vs. tiny).'],
+    ['In "The dog chased the ball," what is the subject?', 'The dog', ['chased', 'the ball', 'chased the ball'], 'The subject is who or what does the action. Ask "Who chased?" → the dog. "Chased" is the verb and "the ball" is the object (what got chased).'],
+    ['What is the climax of a story?', 'The turning point with the most tension', ['The introduction of the characters', 'The events after the problem is solved', 'The background information'], 'Plot order: exposition (intro) → rising action → CLIMAX (the peak moment, highest tension) → falling action → resolution. The climax is where the conflict comes to a head.'],
+    ['Which sentence is written in the correct past tense?', 'Yesterday we swam in the lake.', ['Yesterday we swim in the lake.', 'Yesterday we swimmed in the lake.', 'Yesterday we have swam in the lake.'], '"Swim" is irregular: swim → swam → (have) swum. "Yesterday" signals simple past, so use "swam." Don\'t add -ed to irregular verbs.'],
+    ['What is the best evidence to support a claim in an essay?', 'A fact or quote from a reliable source', ['Your personal feeling about the topic', 'A rumor you heard from a friend', 'A random statistic with no source'], 'Strong evidence is specific and trustworthy: facts, data, or direct quotes from credible sources. Then explain HOW it supports your claim.'],
+  ],
+  Science: [
+    ['What is the basic unit of life?', 'The cell', ['The atom', 'The organ', 'The tissue'], 'All living things are made of cells — the smallest unit that can carry out life processes. Levels go: cell → tissue → organ → organ system → organism. Atoms are not alive.'],
+    ['Which organelle is the "powerhouse" of the cell, releasing energy?', 'Mitochondria', ['Nucleus', 'Cell wall', 'Ribosome'], 'Mitochondria break down sugar (cellular respiration) to release energy. The nucleus holds DNA, ribosomes make proteins, the cell wall gives plants structure.'],
+    ['What do plants make during photosynthesis?', 'Glucose (sugar) and oxygen', ['Carbon dioxide and water', 'Protein and nitrogen', 'Only oxygen'], 'Photosynthesis: carbon dioxide + water + sunlight → glucose + oxygen. Plants take IN CO₂ and water and give OFF oxygen. Remember it happens in chloroplasts.'],
+    ['Which structure is found in plant cells but NOT in animal cells?', 'Cell wall', ['Cell membrane', 'Nucleus', 'Mitochondria'], 'Plant cells have a cell wall, chloroplasts, and a large central vacuole. Both plant and animal cells have a membrane, nucleus, and mitochondria.'],
+    ['In a food chain, what is an organism that makes its own food called?', 'Producer', ['Consumer', 'Decomposer', 'Predator'], 'Producers (plants, algae) make food from sunlight. Consumers eat other organisms. Decomposers (fungi, bacteria) break down dead things. Food chains always start with a producer.'],
+    ['What is the difference between a physical and a chemical change?', 'A chemical change makes a new substance', ['A physical change makes a new substance', 'Chemical changes only happen with heat', 'There is no difference'], 'Physical change = same substance, new form (melting ice, tearing paper). Chemical change = a new substance forms (burning, rusting, baking). Signs: gas bubbles, color change, light/heat, new smell.'],
+    ['A dominant allele is written as "B" and recessive as "b". Which genotype shows the recessive trait?', 'bb', ['BB', 'Bb', 'bB'], 'The recessive trait only shows when there is no dominant allele to hide it — you need two recessive copies (bb). Bb looks dominant because one B is enough.'],
+    ['What is the smallest particle of an element that keeps its properties?', 'Atom', ['Molecule', 'Cell', 'Compound'], 'An atom is the smallest piece of an element (like one gold atom). A molecule is two or more atoms bonded together. A compound is atoms of DIFFERENT elements bonded.'],
+    ['What layer of Earth do we live on?', 'Crust', ['Mantle', 'Outer core', 'Inner core'], 'Earth\'s layers from outside in: crust (thin rocky surface) → mantle (hot, slowly flowing rock) → outer core (liquid metal) → inner core (solid metal).'],
+    ['In the scientific method, what is a hypothesis?', 'A testable prediction about what will happen', ['A proven law of nature', 'The final conclusion', 'A list of materials'], 'A hypothesis is an educated, testable guess, often written "If ___, then ___." You test it with an experiment, then write a conclusion about whether the data supported it.'],
+    ['In an experiment, the variable the scientist changes on purpose is the:', 'Independent variable', ['Dependent variable', 'Control variable', 'Constant'], 'Independent = what YOU change. Dependent = what you measure (it depends on the change). Controls/constants stay the same so the test is fair.'],
+    ['Which is an example of an abiotic factor in an ecosystem?', 'Sunlight', ['Grass', 'Bacteria', 'Deer'], '"Biotic" means living (plants, animals, bacteria). "Abiotic" means non-living: sunlight, water, temperature, soil, rocks. "A-" means "not."'],
+    ['Which body system carries oxygen to the cells?', 'Circulatory system', ['Digestive system', 'Nervous system', 'Skeletal system'], 'The circulatory system (heart, blood, blood vessels) delivers oxygen and nutrients. It works with the respiratory system, which brings oxygen into the lungs.'],
+    ['What causes the seasons on Earth?', 'The tilt of Earth\'s axis', ['Earth\'s distance from the Sun', 'The Moon\'s phases', 'The Sun getting hotter and cooler'], 'Earth is tilted about 23.5°. When your hemisphere tilts toward the Sun, sunlight hits more directly and days are longer → summer. Distance barely matters — Earth is actually closest to the Sun in January.'],
+  ],
+  'Social Studies': [
+    ['What are the three branches of the U.S. government?', 'Legislative, Executive, Judicial', ['Federal, State, Local', 'President, Senate, House', 'Democratic, Republican, Independent'], 'Legislative (Congress) makes laws, Executive (President) enforces laws, Judicial (courts) interprets laws. This separation of powers keeps any one branch from getting too strong.'],
+    ['What is the purpose of "checks and balances"?', 'To keep any one branch from having too much power', ['To balance the national budget', 'To check citizens\' voting records', 'To give the President final say'], 'Each branch can limit the others: the President can veto laws, Congress can override vetoes, courts can strike down unconstitutional laws.'],
+    ['Which river valley civilization developed in Egypt?', 'The Nile', ['The Tigris and Euphrates', 'The Indus', 'The Yellow River'], 'Ancient Egypt grew along the Nile, whose yearly floods left rich soil. Mesopotamia = Tigris & Euphrates, India = Indus, China = Yellow (Huang He).'],
+    ['Lines of latitude measure distance:', 'North or south of the Equator', ['East or west of the Prime Meridian', 'Above sea level', 'Between time zones'], 'Latitude lines run side to side (like ladder rungs — "lat is flat") and measure north/south from the Equator. Longitude lines run pole to pole and measure east/west from the Prime Meridian.'],
+    ['What is "supply and demand"?', 'Prices depend on how much is available and how much people want it', ['The government sets all prices', 'Stores must supply whatever customers demand', 'Workers demand higher pay'], 'When demand goes up or supply goes down, prices usually rise. When supply goes up or demand drops, prices usually fall.'],
+    ['What did the Magna Carta (1215) do?', 'Limited the power of the English king', ['Declared American independence', 'Created the Roman Republic', 'Ended the Hundred Years\' War'], 'The Magna Carta made the king follow the law too. It inspired later ideas in the U.S. Constitution, like the right to a fair trial.'],
+    ['Which ancient civilization is known for creating democracy?', 'Athens (Ancient Greece)', ['Ancient Egypt', 'The Aztec Empire', 'Ancient China'], 'Athens developed direct democracy around 500 BCE, where citizens voted on laws themselves. The word comes from Greek: demos (people) + kratos (power).'],
+    ['What is a primary source?', 'An original record from the time, like a diary or photo', ['A textbook written years later', 'An encyclopedia article', 'A movie about a historical event'], 'Primary sources were created by people who were there: letters, diaries, photos, speeches. Secondary sources interpret the past later: textbooks, biographies, documentaries.'],
+    ['The Silk Road was mainly used for:', 'Trade between Asia and Europe', ['Military invasions of Rome', 'Building the Great Wall', 'Spreading Christianity to the Americas'], 'The Silk Road was a network of trade routes linking China to the Mediterranean. Goods (silk, spices), ideas, religions, and even diseases spread along it.'],
+    ['Which is a responsibility of U.S. citizens?', 'Serving on a jury when called', ['Joining a political party', 'Owning property', 'Voting for the President\'s party'], 'Responsibilities include obeying laws, paying taxes, and serving on juries. Voting is a right (and civic duty), but joining a party or owning property is a personal choice.'],
+    ['What was the feudal system in medieval Europe?', 'A system where land was traded for loyalty and service', ['A democratic system of voting', 'A trade route across the ocean', 'A type of religious ceremony'], 'Kings gave land to lords, lords gave land to knights for military service, and peasants (serfs) worked the land for protection. It was a pyramid of loyalty.'],
+    ['Which continent is the Sahara Desert on?', 'Africa', ['Asia', 'South America', 'Australia'], 'The Sahara covers much of northern Africa and is the largest hot desert in the world.'],
+    ['What is "scarcity" in economics?', 'Limited resources but unlimited wants', ['When a product is very popular', 'A time of war', 'Having too much money'], 'Because resources are limited, people must make choices. What you give up when you choose is the "opportunity cost."'],
+    ['Why did the Roman Empire build roads and aqueducts?', 'To move armies/trade quickly and bring water to cities', ['To mark the border with China', 'Only for decoration', 'To escape floods'], 'Roman roads helped soldiers and merchants move fast across the empire. Aqueducts carried fresh water to cities using gravity.'],
+  ],
+};
+</script>
+
+<script>
+// ================= 8th GRADE =================
+BANK[8] = {
+  Math: [
+    () => { const b = R(2, 5), m = R(2, 5), n = R(2, 5);
+      return MQ(`Simplify:  ${b}^${m} × ${b}^${n}`, `${b}^${m + n}`, [`${b}^${m * n}`, `${b * b}^${m + n}`, `${b}^${Math.abs(m - n)}`],
+        `When you multiply powers with the SAME base, keep the base and ADD the exponents: ${b}^${m} × ${b}^${n} = ${b}^(${m}+${n}) = ${b}^${m + n}. (You only multiply exponents when raising a power to a power, like (${b}^${m})^${n}.)`); },
+    () => { const x1 = R(-5, 5), y1 = R(-5, 5), dx = nz(-4, 4), m = nz(-4, 4), x2 = x1 + dx, y2 = y1 + m * dx;
+      return MQ(`What is the slope of the line through (${x1}, ${y1}) and (${x2}, ${y2})?`, m, [-m, dx === 0 ? 0 : fmt(1 / m), m * dx],
+        `Slope = rise ÷ run = (y₂ − y₁) ÷ (x₂ − x₁) = (${y2} − ${sgn(y1)}) ÷ (${x2} − ${sgn(x1)}) = ${m * dx} ÷ ${dx} = ${m}. Keep the points in the same order on top and bottom.`); },
+    () => { const [a, b, c] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17], [9, 12, 15], [7, 24, 25]]);
+      return MQ(`A right triangle has legs ${a} and ${b}. How long is the hypotenuse?`, c, [a + b, a * a + b * b, c + 2],
+        `Use the Pythagorean theorem a² + b² = c². ${a}² + ${b}² = ${a * a} + ${b * b} = ${c * c}. Then take the square root: √${c * c} = ${c}. Don't forget the square-root step!`); },
+    () => { const x = R(-6, 9), a = R(4, 9), c = R(1, a - 1), b = nz(-10, 10), d = (a - c) * x + b;
+      return MQ(`Solve for x:  ${a}x + ${sgn(b)} = ${c}x + ${sgn(d)}`, x, [-x, (d + b) / (a - c) | 0, x + 3],
+        `Get the x-terms on one side: subtract ${c}x from both sides → ${a - c}x + ${sgn(b)} = ${d}. Subtract ${sgn(b)} from both sides → ${a - c}x = ${d - b}. Divide by ${a - c} → x = ${x}.`); },
+    () => { const coef = R(11, 99) / 10, exp = R(3, 8), num = Math.round(coef * 10 ** exp);
+      return MQ(`Write ${num.toLocaleString('en-US')} in scientific notation.`, `${fmt(coef)} × 10^${exp}`, [`${fmt(coef)} × 10^${exp + 1}`, `${fmt(coef * 10)} × 10^${exp - 1}`, `${fmt(coef)} × 10^${exp - 1}`],
+        `Move the decimal until you have a number between 1 and 10: ${fmt(coef)}. Count how many places you moved it — ${exp} places left — and that's the exponent: ${fmt(coef)} × 10^${exp}. Big numbers get positive exponents.`); },
+    () => { const m = pick([-5, -4, -3, -2, 2, 3, 4, 5]), b = nz(-9, 9), x = R(-4, 6);
+      return MQ(`If f(x) = ${m}x ${b < 0 ? '−' : '+'} ${Math.abs(b)}, what is f(${x})?`, m * x + b, [m + x + b, m * x - b, m * (x + b)],
+        `Replace every x with ${x}: f(${x}) = ${m}(${x}) ${b < 0 ? '−' : '+'} ${Math.abs(b)} = ${m * x} ${b < 0 ? '−' : '+'} ${Math.abs(b)} = ${m * x + b}. Multiply before you add (order of operations).`); },
+    () => { const x = R(1, 8), y = R(1, 8), s = x + y, d = x - y;
+      return MQ(`Solve the system:\nx + y = ${s}\nx − y = ${d}\nWhat is x?`, x, [y, s, Math.abs(d)],
+        `Add the two equations so y cancels: (x + y) + (x − y) = ${s} + ${sgn(d)} → 2x = ${s + d} → x = ${x}. (Then y = ${s} − ${x} = ${y}.)`); },
+    () => { const r = R(1, 5), h = R(2, 10), v = +(3.14 * r * r * h).toFixed(2);
+      return MQ(`Find the volume of a cylinder with radius ${r} m and height ${h} m. (π ≈ 3.14)`, fmt(v) + ' m³', [fmt(+(3.14 * 2 * r * h).toFixed(2)) + ' m³', fmt(+(3.14 * r * h).toFixed(2)) + ' m³', fmt(+(3.14 * r * r * h / 3).toFixed(2)) + ' m³'],
+        `Volume of a cylinder = (area of the circle base) × height = πr²h. 3.14 × ${r}² × ${h} = 3.14 × ${r * r} × ${h} = ${fmt(v)} m³. (Dividing by 3 would be a cone.)`); },
+    () => { const n = R(2, 15), sq = n * n;
+      return MQ(`What is √${sq}?`, n, [sq / 2, n + 1, n * 2],
+        `A square root asks "what number times itself equals ${sq}?" ${n} × ${n} = ${sq}, so √${sq} = ${n}. It's not half the number.`); },
+    () => { const m = pick([-6, -5, -4, -3, -2, 2, 3, 4, 5, 6]), b = nz(-9, 9);
+      return MQ(`In the equation y = ${m}x ${b < 0 ? '−' : '+'} ${Math.abs(b)}, what is the y-intercept?`, b, [m, -b, m + b],
+        `In slope-intercept form y = mx + b, m is the slope and b is the y-intercept (where the line crosses the y-axis, when x = 0). Here b = ${b}. Watch the sign: "− ${Math.abs(b)}" means b = ${b}.`); },
+  ],
+  English: [
+    ['Which sentence is in the active voice?', 'The chef cooked the meal.', ['The meal was cooked by the chef.', 'The meal had been cooked.', 'The meal is being cooked.'], 'Active voice: the subject DOES the action (the chef cooked). Passive voice: the subject receives the action, often with "was ___ by." Active is usually clearer and stronger.'],
+    ['What is a gerund?', 'A verb ending in -ing used as a noun', ['A verb ending in -ed used as an adjective', 'A word that joins two clauses', 'An adverb that modifies a verb'], 'In "Swimming is fun," swimming acts as a noun (the subject). Gerunds = -ing verbs working as nouns. Participles are verb forms used as adjectives ("the running water").'],
+    ['When a reader knows something a character does not, it is called:', 'Dramatic irony', ['Foreshadowing', 'Flashback', 'Situational irony'], 'Dramatic irony = the audience knows more than the character (we know the killer is in the house). Situational irony = the opposite of what\'s expected happens. Foreshadowing = hints about the future.'],
+    ['Which sentence uses a semicolon correctly?', 'I love to read; my brother prefers video games.', ['I love to read; and my brother plays games.', 'I love; to read books.', 'Because I love to read; I go to the library.'], 'A semicolon joins two COMPLETE sentences that are closely related, without "and/but/so." Both sides of the semicolon must be able to stand alone.'],
+    ['What is the mood of a sentence like "If I were you, I would study"?', 'Subjunctive (a wish or hypothetical)', ['Indicative (a fact)', 'Imperative (a command)', 'Interrogative (a question)'], 'Subjunctive mood expresses wishes or situations that aren\'t real — that\'s why it\'s "If I WERE you," not "was." Indicative states facts, imperative gives commands.'],
+    ['An author\'s "tone" is:', 'Their attitude toward the subject', ['The main idea of the text', 'The feeling the reader gets', 'The time period of the story'], 'Tone = the author\'s attitude (sarcastic, serious, hopeful), shown by word choice. Mood = the feeling the READER gets. Tip: tone is the writer, mood is the reader.'],
+    ['"Counterclaim" in an argumentative essay means:', 'An opposing viewpoint that you address', ['Your main argument', 'A quote that supports you', 'The conclusion paragraph'], 'A counterclaim is what the other side would argue. Strong essays acknowledge it and then rebut it with evidence — that makes your own claim more convincing.'],
+    ['Which is an example of a flashback?', 'The story pauses to show the hero\'s childhood', ['A dark cloud hints something bad will happen', 'The narrator talks directly to the reader', 'The story ends on a cliffhanger'], 'A flashback interrupts the present to show earlier events. Hints about future events are foreshadowing.'],
+    ['Which word is spelled correctly?', 'necessary', ['neccessary', 'necesary', 'neccesary'], '"Necessary" has one C and two S\'s. Memory trick: a shirt has one Collar and two Sleeves.'],
+    ['Choose the sentence with correct subject-verb agreement.', 'Each of the students has a book.', ['Each of the students have a book.', 'The group of kids are loud.', 'Neither of them are ready.'], '"Each," "neither," and "one" are singular, so they take singular verbs (has, is). Ignore the prepositional phrase "of the students" when finding the real subject.'],
+    ['What does the root "chron" mean, as in "chronological"?', 'time', ['sound', 'life', 'water'], '"Chron" = time: chronological (time order), chronic (lasting a long time), synchronize (same time). "Phon" = sound, "bio" = life, "hydr" = water.'],
+    ['Which sentence contains a verbal (participle) used as an adjective?', 'The broken window let in cold air.', ['She broke the window.', 'He will fix the window.', 'The window is near the door.'], '"Broken" is a participle — a verb form describing the noun "window," so it acts like an adjective. In "She broke the window," broke is the actual verb.'],
+    ['What makes a source credible for a research paper?', 'An expert author, recent date, and cited evidence', ['It has lots of pictures', 'It agrees with your opinion', 'It was the first search result'], 'Check the author\'s expertise, publication date, the site (.gov, .edu, established publishers), and whether it cites its own evidence. Agreeing with you doesn\'t make it reliable.'],
+    ['An "allusion" is:', 'A reference to a well-known person, place, event, or work', ['An exaggeration for effect', 'A comparison using "like" or "as"', 'A word that imitates a sound'], 'Saying "he\'s a real Romeo" alludes to Shakespeare. Exaggeration is hyperbole, "like/as" comparisons are similes, and sound words are onomatopoeia.'],
+  ],
+  Science: [
+    ['According to Newton\'s First Law, an object in motion will:', 'Stay in motion unless acted on by a force', ['Always slow down and stop', 'Speed up over time', 'Move in a circle'], 'That\'s inertia. Things only speed up, slow down, or turn when a net force acts on them. Things "naturally" stop on Earth because friction is a force.'],
+    ['A 10 N force pushes a 2 kg cart. What is its acceleration? (F = ma)', '5 m/s²', ['20 m/s²', '12 m/s²', '8 m/s²'], 'Rearrange F = ma to a = F ÷ m. a = 10 N ÷ 2 kg = 5 m/s². Multiplying would give force, not acceleration.'],
+    ['Where are protons and neutrons found in an atom?', 'In the nucleus', ['In the electron cloud', 'Orbiting outside the atom', 'Only in metals'], 'The nucleus (center) holds protons (+) and neutrons (no charge). Electrons (−) move around the nucleus in the electron cloud.'],
+    ['What does the atomic number of an element tell you?', 'The number of protons', ['The number of neutrons', 'The mass of the atom', 'The number of molecules'], 'Atomic number = protons, and it defines the element (every carbon atom has 6). Mass number = protons + neutrons.'],
+    ['What does the Law of Conservation of Mass say?', 'Matter is not created or destroyed in a chemical reaction', ['Mass always increases when heated', 'Atoms disappear when things burn', 'Energy turns into mass'], 'Atoms just rearrange in a reaction, so the total mass of reactants equals the total mass of products. That\'s why chemical equations must be balanced.'],
+    ['What is natural selection?', 'Organisms with helpful traits survive and reproduce more', ['Animals choosing to change their bodies', 'Scientists breeding plants', 'All organisms surviving equally'], 'Individuals with traits that fit their environment survive and pass those traits on. Over many generations, the population changes (evolution). Individuals don\'t choose to adapt.'],
+    ['What evidence best shows that continents have moved?', 'Matching fossils and rock layers on different continents', ['Continents are all different sizes', 'Oceans are salty', 'Mountains are tall'], 'The same fossils (like Mesosaurus) and rock types appear on continents now separated by oceans, and the coastlines fit like puzzle pieces — evidence for plate tectonics.'],
+    ['Which type of wave needs a medium (like air or water) to travel?', 'Sound waves', ['Light waves', 'Radio waves', 'X-rays'], 'Sound is a mechanical wave — it vibrates particles, so it can\'t travel through empty space. Light, radio, and X-rays are electromagnetic waves and CAN travel through a vacuum.'],
+    ['A ball at the top of a hill has mostly what kind of energy?', 'Potential energy', ['Kinetic energy', 'Sound energy', 'Nuclear energy'], 'Potential energy is stored energy from position (height). As the ball rolls down, potential energy turns into kinetic energy (energy of motion).'],
+    ['What causes the phases of the Moon?', 'How much of the Moon\'s sunlit side we see as it orbits Earth', ['Earth\'s shadow covering the Moon', 'Clouds blocking the Moon', 'The Moon producing less light'], 'Half the Moon is always lit by the Sun. As it orbits Earth, we see different amounts of that lit half. Earth\'s shadow only matters during a lunar eclipse.'],
+    ['What is a genetic mutation?', 'A change in the DNA sequence', ['A new organ growing', 'A type of cell division', 'An animal learning a trick'], 'Mutations are changes in DNA. They can be harmful, helpful, or have no effect. Helpful ones can spread through natural selection.'],
+    ['Which is the best example of a chemical reaction?', 'Iron rusting', ['Ice melting', 'Salt dissolving in water', 'Cutting wood'], 'Rust (iron oxide) is a brand-new substance, so rusting is chemical. Melting, dissolving, and cutting change form, not identity — they\'re physical.'],
+    ['What holds the planets in orbit around the Sun?', 'Gravity', ['Magnetism', 'Friction', 'Air pressure'], 'The Sun\'s huge mass creates strong gravity that pulls on the planets. Their forward motion plus that pull makes a curved orbit.'],
+    ['Speed = distance ÷ time. A car goes 150 km in 3 hours. What is its speed?', '50 km/h', ['450 km/h', '153 km/h', '147 km/h'], 'Divide distance by time: 150 km ÷ 3 h = 50 km/h. Check the units — km per hour means km ÷ h.'],
+  ],
+  'Social Studies': [
+    ['What document declared the 13 colonies independent from Britain in 1776?', 'The Declaration of Independence', ['The U.S. Constitution', 'The Bill of Rights', 'The Articles of Confederation'], 'The Declaration of Independence (1776, mostly written by Thomas Jefferson) announced independence. The Constitution (1787) set up the government; the Bill of Rights (1791) added freedoms.'],
+    ['What was a major weakness of the Articles of Confederation?', 'Congress could not collect taxes', ['The President had too much power', 'It created too many courts', 'It gave states no power'], 'The Articles made the national government too weak — no power to tax, no national army, no way to regulate trade. That\'s why the Constitution replaced it in 1787.'],
+    ['Which amendment protects freedom of speech and religion?', 'The First Amendment', ['The Second Amendment', 'The Fifth Amendment', 'The Tenth Amendment'], 'The 1st Amendment protects speech, religion, press, assembly, and petition. The 2nd is the right to bear arms; the 5th protects against self-incrimination.'],
+    ['What was the "Great Compromise" at the Constitutional Convention?', 'Congress would have a Senate with equal votes and a House based on population', ['Slaves counted as three-fifths of a person', 'The President is chosen by the Electoral College', 'The capital moved to Washington, D.C.'], 'Big states wanted population-based representation; small states wanted equal votes. The Great Compromise did both: House = population, Senate = 2 per state.'],
+    ['Why did the colonists protest "taxation without representation"?', 'They were taxed by Parliament but had no representatives there', ['They didn\'t want to pay any taxes ever', 'The King refused to collect taxes', 'They wanted France to tax them instead'], 'Laws like the Stamp Act taxed the colonies, but colonists couldn\'t elect anyone to Parliament. They argued only their own elected assemblies should tax them.'],
+    ['The Louisiana Purchase (1803) was bought from which country?', 'France', ['Spain', 'Britain', 'Mexico'], 'President Jefferson bought it from Napoleon\'s France for $15 million, doubling the size of the U.S. Lewis and Clark then explored it.'],
+    ['What was the main cause of the U.S. Civil War?', 'Disagreement over slavery and states\' rights', ['A dispute over the Canadian border', 'Taxes on tea', 'War with Mexico'], 'The North and South split over slavery, especially whether it could spread into new western territories. Southern states seceded after Lincoln was elected in 1860.'],
+    ['What did the Emancipation Proclamation (1863) do?', 'Declared enslaved people in Confederate states free', ['Ended the Civil War', 'Gave women the right to vote', 'Abolished slavery in the whole U.S. immediately'], 'Lincoln\'s proclamation freed enslaved people in states that were in rebellion and let Black men join the Union army. Slavery was fully abolished nationwide by the 13th Amendment (1865).'],
+    ['What was "Manifest Destiny"?', 'The belief the U.S. should expand across North America', ['A plan to end slavery', 'A treaty with Native Americans', 'The first U.S. railroad'], 'In the 1840s many Americans believed the U.S. was destined to stretch from the Atlantic to the Pacific. It drove westward expansion and pushed Native Americans off their land.'],
+    ['What was the purpose of Reconstruction (1865–1877)?', 'To rebuild the South and bring it back into the Union', ['To build the transcontinental railroad', 'To expand into Mexico', 'To create the first national parks'], 'Reconstruction rebuilt the South, readmitted Confederate states, and tried to protect the rights of freed African Americans — though many gains were rolled back after it ended.'],
+    ['Who wrote most of the Declaration of Independence?', 'Thomas Jefferson', ['George Washington', 'Benjamin Franklin', 'Abraham Lincoln'], 'Jefferson was the main author. Franklin and John Adams edited it. Washington led the army, and Lincoln lived almost a century later.'],
+    ['The Industrial Revolution mainly changed:', 'How goods were made — from hand tools to machines and factories', ['How presidents were elected', 'Which religion people practiced', 'The borders of the 13 colonies'], 'Factories, steam power, and machines replaced home production. It led to cities growing fast, new jobs, and also problems like child labor and pollution.'],
+    ['What is federalism?', 'Power shared between national and state governments', ['Only the national government has power', 'Only states have power', 'Rule by a king'], 'Under federalism, the national government handles things like printing money and war, while states handle things like schools and driver\'s licenses. Some powers are shared, like taxing.'],
+    ['What was the Trail of Tears?', 'The forced removal of the Cherokee and other Native nations from their land', ['A route used by the Underground Railroad', 'The path of the Pony Express', 'A Civil War battle'], 'Under the Indian Removal Act (1830), the U.S. forced Native nations to move west to Indian Territory. Thousands of Cherokee died on the journey in 1838–39.'],
+  ],
+};
+</script>
+
+<script>
+// ================= 7th GRADE — English generators =================
+BANK[7].English.push(
+  // Parts of speech in a randomly built sentence
+  () => {
+    const adj = pick(['tiny','clever','noisy','ancient','bright','lazy','brave','muddy','curious','gentle','shiny','hungry']);
+    const noun = pick(['puppy','scientist','robot','teacher','dragon','farmer','kitten','pilot','student','wizard','mechanic','goat']);
+    const adv = pick(['quickly','quietly','happily','loudly','carefully','suddenly','gracefully','eagerly','slowly','boldly','nervously','proudly']);
+    const verb = pick(['jumped','whispered','raced','wandered','sang','climbed','laughed','danced','slept','shouted','marched','hid']);
+    const [prep, place] = pick([['across','the field'],['under','the bridge'],['near','the lake'],['through','the city'],['behind','the barn'],['over','the fence']]);
+    const sentence = `The ${adj} ${noun} ${adv} ${verb} ${prep} ${place}.`;
+    const [pos, word] = pick([['adjective', adj], ['noun', noun], ['adverb', adv], ['verb', verb], ['preposition', prep]]);
+    const why = { adjective: 'describes a noun (what kind?)', noun: 'names a person, place, thing, or idea', adverb: 'describes a verb — it tells how, when, or where', verb: 'shows the action', preposition: 'shows the relationship/position of a noun (across, under, near…)' };
+    return MQ(`"${sentence}"\nWhat part of speech is "${word}"?`, pos, shuffle(['noun','verb','adjective','adverb','preposition'].filter(p => p !== pos)),
+      `"${word}" is a ${pos} because it ${why[pos]}. In this sentence: "${noun}" is the noun, "${adj}" describes it, "${verb}" is the action, "${adv}" tells how, and "${prep}" is the preposition.`);
+  },
+  // Homophones
+  () => {
+    const sets = [
+      { words: ['their', 'there', "they're"], rule: 'Their = belongs to them. There = a place (it has "here" in it) or "there is". They\'re = they are — try reading it as "they are".',
+        s: { their: ['The players grabbed ___ helmets before the game.', 'My neighbors painted ___ house bright blue.', 'The birds built ___ nest in the oak tree.'],
+             there: ['We left the snacks over ___ by the door.', 'Is ___ any pizza left?', 'Do you think ___ is enough time to finish?'],
+             "they're": ['I think ___ coming to the party later.', 'The twins said ___ too tired to play.', 'Ask the coaches if ___ ready to start.'] } },
+      { words: ['your', "you're", 'yore'], rule: 'Your = belongs to you. You\'re = you are. If "you are" fits, use you\'re. (Yore is an old word meaning "long ago".)',
+        s: { your: ['Please put ___ name at the top of the page.', 'Is this ___ jacket on the floor?', "Don't forget ___ lunch money."],
+             "you're": ['Tell me when ___ ready to leave.', 'I think ___ going to love this book.', 'If ___ hungry, grab a snack.'] } },
+      { words: ['its', "it's", "its'"], rule: "It's = it is / it has. Its = belongs to it (no apostrophe, just like his or hers). Its' is never correct.",
+        s: { its: ['The dog wagged ___ tail.', 'The team changed ___ logo.', 'The tree lost all of ___ leaves.'],
+             "it's": ['I think ___ going to rain today.', 'Grab a coat because ___ cold outside.', 'Do you know if ___ time for lunch?'] } },
+      { words: ['to', 'too', 'two'], rule: 'Two = the number 2. Too = also, or "more than enough". To = a direction or before a verb (to the store, to learn).',
+        s: { to: ['We walked ___ the store after school.', 'She wants ___ learn the guitar.'], too: ['This soup is ___ hot to eat.', 'My sister wants to come ___.'], two: ['I have ___ older brothers.', 'The movie lasted ___ hours.'] } },
+    ];
+    const set = pick(sets), word = pick(Object.keys(set.s)), sentence = pick(set.s[word]);
+    return MQ(`Which word correctly fills the blank?\n"${sentence}"`, word, set.words.filter(w => w !== word), `"${word}" is correct. ${set.rule}`);
+  },
+  // Synonyms
+  () => fromTable([['ancient','old'],['brave','courageous'],['rapid','fast'],['enormous','huge'],['furious','angry'],['gloomy','sad'],['difficult','hard'],['cautious','careful'],['frequently','often'],['obtain','get'],['conclude','end'],['assist','help'],['vanish','disappear'],['peculiar','strange'],['precise','exact'],['fragile','delicate'],['reluctant','unwilling'],['abundant','plentiful'],['ponder','think'],['timid','shy'],['courteous','polite'],['hazardous','dangerous'],['comprehend','understand'],['vacant','empty'],['drowsy','sleepy'],['commence','begin'],['wealthy','rich'],['silent','quiet']],
+    ([w, s]) => ({ q: `Which word is a synonym for "${w}" (means about the same)?`, explain: `"${w}" means "${s}". Synonyms are words with the same or similar meaning. Tip: put the choice into a sentence in place of "${w}" and see if the meaning stays the same.` })),
+  // Antonyms
+  () => fromTable([['expand','shrink'],['ancient','modern'],['generous','selfish'],['victory','defeat'],['rigid','flexible'],['temporary','permanent'],['scarce','plentiful'],['arrive','depart'],['maximum','minimum'],['include','exclude'],['accept','reject'],['brave','cowardly'],['polite','rude'],['ascend','descend'],['transparent','opaque'],['private','public'],['frequent','rare'],['shallow','deep'],['cautious','reckless'],['borrow','lend'],['simple','complex'],['praise','criticize'],['increase','decrease'],['guilty','innocent']],
+    ([w, a]) => ({ q: `Which word is an antonym of "${w}" (means the opposite)?`, explain: `The opposite of "${w}" is "${a}". Antonyms are words with opposite meanings (hot/cold). Don't mix them up with synonyms, which mean the same thing.` })),
+  // Prefixes
+  () => fromTable([['un','not','unhappy'],['re','again','rewrite'],['pre','before','preview'],['mis','wrongly','misspell'],['sub','under','submarine'],['inter','between','international'],['trans','across','transport'],['anti','against','antibiotic'],['ex','out of','exit'],['semi','half','semicircle'],['tri','three','triangle'],['multi','many','multicolored'],['post','after','postgame'],['co','together','coworker'],['auto','self','autograph'],['micro','small','microscope'],['over','too much','overcook']],
+    ([p, m, ex]) => ({ q: `What does the prefix "${p}-" mean, as in "${ex}"?`, explain: `"${p}-" means "${m}", so "${ex}" is built from "${m}" + the rest of the word. Learning prefixes lets you figure out words you've never seen.` })),
+  // Suffixes
+  () => fromTable([['less','without','careless'],['ful','full of','hopeful'],['er','one who','teacher'],['able','able to be','readable'],['ology','the study of','biology'],['ness','the state of being','kindness'],['ly','in a certain way','quickly'],['ist','a person who practices','artist'],['phobia','fear of','arachnophobia']],
+    ([s, m, ex]) => ({ q: `What does the suffix "-${s}" mean, as in "${ex}"?`, explain: `"-${s}" means "${m}". A suffix goes at the END of a word and often changes its meaning or part of speech.` })),
+  // Figurative language
+  () => whichGroup({
+      simile: ['Her smile was as bright as the sun.', 'He ran like a cheetah.', 'The baby slept like a rock.', 'The lake was as smooth as glass.', 'My brother eats like a vacuum cleaner.'],
+      metaphor: ['The classroom was a zoo.', 'Time is a thief.', 'Her voice was music to his ears.', 'The snow was a white blanket on the town.', 'Life is a roller coaster.'],
+      personification: ['The alarm clock screamed at me.', 'The flowers danced in the breeze.', 'The old car groaned up the hill.', 'The moon smiled down on us.', 'Opportunity knocked on her door.'],
+      hyperbole: ["I'm so hungry I could eat a horse.", 'This backpack weighs a ton.', "I've told you a million times.", 'The line was a mile long.', 'He is older than dirt.'],
+      onomatopoeia: ['The angry wasps buzzed around the hive.', 'The bacon sizzled in the pan.', 'Boom! The fireworks lit up the sky.', 'The door creaked open.', 'The cow mooed at the farmer.'],
+      alliteration: ['Sally sells seashells by the seashore.', 'Big bears bounce on blue balloons.', 'Peter picked a peck of peppers.', 'Tiny Tim took ten turtles to town.', 'Five funny frogs fished for flies.'],
+    }, (label, s) => ({ q: `What kind of figurative language is this?\n"${s}"`, explain: `This is ${label}. ` + {
+      simile: 'A simile compares two things using "like" or "as".', metaphor: 'A metaphor says one thing IS another — no "like" or "as".',
+      personification: 'Personification gives human actions or feelings to something that isn\'t human.', hyperbole: 'Hyperbole is an exaggeration so big it can\'t be literally true.',
+      onomatopoeia: 'Onomatopoeia is a word that imitates a sound (buzz, sizzle, boom).', alliteration: 'Alliteration repeats the same beginning sound in words close together.' }[label] })),
+  // Irregular past tense
+  () => { const [p, past] = pick([['go','went'],['bring','brought'],['catch','caught'],['teach','taught'],['think','thought'],['swim','swam'],['write','wrote'],['ride','rode'],['freeze','froze'],['choose','chose'],['speak','spoke'],['fly','flew'],['draw','drew'],['throw','threw'],['begin','began'],['sing','sang'],['drink','drank'],['buy','bought'],['fight','fought'],['sleep','slept'],['take','took'],['shake','shook'],['steal','stole'],['break','broke']]);
+    return MQ(`What is the correct past tense of "${p}"?`, past, [p.replace(/e$/, '') + 'ed', p, past === 'bought' ? 'brought' : past === 'brought' ? 'bought' : past.replace(/e$/, '') + 'ed'],
+      `"${p}" is an irregular verb, so you don't add -ed. Today I ${p}; yesterday I ${past}. Irregular verbs have to be memorized — say "Yesterday I ___" out loud to check.`); },
+  // Sentence types
+  () => whichGroup({
+      declarative: ['The library closes at six.', 'My cousin lives in Texas.', 'Penguins cannot fly.', 'The bus was late this morning.'],
+      interrogative: ['Where did you put my shoes?', 'Is the game on tonight?', 'Why is the sky blue?', 'Who ate the last cookie?'],
+      imperative: ['Close the door behind you.', 'Please hand me the scissors.', 'Turn left at the next light.', 'Wash your hands before dinner.'],
+      exclamatory: ['What an amazing goal that was!', "I can't believe we won!", 'That was so scary!', 'Wow, look at that rainbow!'],
+    }, (label, s) => ({ q: `What type of sentence is this?\n"${s}"`, explain: `It's ${label}. ` + {
+      declarative: 'A declarative sentence makes a statement and ends with a period.', interrogative: 'An interrogative sentence asks a question and ends with a question mark.',
+      imperative: 'An imperative sentence gives a command or request — the subject "you" is understood.', exclamatory: 'An exclamatory sentence shows strong feeling and ends with an exclamation point.' }[label] })),
+);
+</script>
+
+<script>
+// ================= 7th GRADE — Science generators =================
+BANK[7].Science.push(
+  () => fromTable([['controls the cell and holds its DNA','nucleus'],['releases energy from food (cellular respiration)','mitochondria'],['makes food from sunlight in plant cells','chloroplast'],['controls what enters and leaves the cell','cell membrane'],['gives plant cells a stiff shape and support','cell wall'],['builds proteins','ribosome'],['stores water in plant cells','vacuole'],['is the jelly-like fluid that fills the cell','cytoplasm']],
+    ([f, o]) => ({ q: `Which part of the cell ${f}?`, explain: `The ${o} ${f}. Quick map: nucleus = control center, mitochondria = energy, chloroplast = photosynthesis, membrane = gatekeeper, cell wall = support, ribosome = proteins.` })),
+  () => fromGroups({
+      biotic: ['an oak tree','a mushroom','bacteria in soil','a hawk','moss on a rock','an earthworm','algae in a pond','a honeybee'],
+      abiotic: ['sunlight','rainwater','air temperature','a rock','sand','oxygen gas','wind','minerals in soil'] },
+    (label, item) => ({ q: `Which of these is ${label === 'biotic' ? 'BIOTIC (living or once living)' : 'ABIOTIC (non-living)'}?`,
+      explain: `${item[0].toUpperCase() + item.slice(1)} is ${label}. Biotic factors are living things (plants, animals, fungi, bacteria). Abiotic factors are non-living parts of an ecosystem: sunlight, water, air, rocks, temperature.` })),
+  () => fromGroups({
+      chemical: ['wood burning','iron rusting','baking a cake','milk going sour','a firework exploding','digesting food','a sliced apple turning brown','vinegar fizzing with baking soda'],
+      physical: ['ice melting','cutting paper','dissolving sugar in water','boiling water','crushing a can','breaking glass','water freezing','mixing sand and salt'] },
+    (label, item) => ({ q: `Which of these is a ${label.toUpperCase()} change?`,
+      explain: `${item[0].toUpperCase() + item.slice(1)} is a ${label} change. Chemical change = a NEW substance forms (signs: gas, color change, heat/light, new smell, can't easily undo). Physical change = same substance, just a new shape, size, or state.` })),
+  () => whichGroup({
+      producer: ['grass','an oak tree','algae','a sunflower','seaweed'], herbivore: ['a rabbit','a deer','a grasshopper','a cow','a caterpillar'],
+      carnivore: ['a wolf','a shark','a hawk','a lion','a snake'], decomposer: ['a mushroom','bacteria','mold','fungi on a log'] },
+    (label, item) => ({ q: `In a food web, what role does ${item} play?`, explain: `${item[0].toUpperCase() + item.slice(1)} is a ${label}. ` +
+      { producer: 'Producers make their own food using sunlight (photosynthesis).', herbivore: 'Herbivores are consumers that eat only plants.',
+        carnivore: 'Carnivores are consumers that eat other animals.', decomposer: 'Decomposers break down dead organisms and return nutrients to the soil.' }[label] })),
+  // Punnett squares
+  () => {
+    const [L, dom, rec] = pick([['B','brown fur','white fur'],['T','tall stems','short stems'],['P','purple flowers','white flowers'],['R','round seeds','wrinkled seeds']]);
+    const l = L.toLowerCase(), g = () => pick([L + L, L + l, l + l]);
+    const p1 = g(), p2 = g(), kids = [];
+    for (const a of p1) for (const b of p2) kids.push(a === L || b !== L ? a + b : b + a);
+    const nRec = kids.filter(k => k === l + l).length, askRec = Math.random() < .5;
+    const pct = (askRec ? nRec : 4 - nRec) * 25 + '%';
+    return MQ(`${L} (${dom}) is dominant over ${l} (${rec}). A ${p1} parent is crossed with a ${p2} parent.\nWhat percent of offspring are expected to have ${askRec ? rec : dom}?`,
+      pct, shuffle(['0%','25%','50%','75%','100%']),
+      `Make a Punnett square: put ${p1[0]} and ${p1[1]} across the top, ${p2[0]} and ${p2[1]} down the side, and combine. The 4 boxes are ${kids.join(', ')}. Only ${l}${l} shows ${rec}; anything with a capital ${L} shows ${dom}. That's ${askRec ? nRec : 4 - nRec} of 4 boxes = ${pct}.`);
+  },
+  () => fromTable([['breaks down food into nutrients','digestive system'],['brings in oxygen and removes carbon dioxide','respiratory system'],['pumps blood through the body','circulatory system'],['sends signals using the brain and nerves','nervous system'],['supports the body and protects organs with bones','skeletal system'],['moves the body using muscles','muscular system'],['fights germs and disease','immune system'],['filters waste out of the blood with the kidneys','excretory system'],['makes hormones that control growth','endocrine system']],
+    ([f, s]) => ({ q: `Which body system ${f}?`, explain: `The ${s} ${f}. Body systems work together — for example, the respiratory system gets oxygen and the circulatory system delivers it.` })),
+  () => whichGroup({
+      igneous: ['forms when magma or lava cools and hardens','granite','obsidian (volcanic glass)','basalt','pumice'],
+      sedimentary: ['forms from layers of sand, mud, and shells pressed together','sandstone','limestone','a rock that often contains fossils','shale'],
+      metamorphic: ['forms when heat and pressure change an existing rock','marble (made from limestone)','slate (made from shale)','gneiss'] },
+    (label, item) => ({ q: `Which type of rock is this: ${item}?`, explain: `That's ${label} rock. Igneous = cooled magma/lava ("ignis" means fire). Sedimentary = layers of sediment pressed and cemented together (where fossils are found). Metamorphic = rock changed by heat and pressure ("meta" means change).` })),
+  () => fromTable([['a solid to a liquid','melting'],['a liquid to a solid','freezing'],['a liquid to a gas','evaporation'],['a gas to a liquid','condensation'],['a solid straight to a gas','sublimation'],['a gas straight to a solid','deposition']],
+    ([d, t]) => ({ q: `What is the change from ${d} called?`, explain: `Going from ${d} is ${t}. Adding heat moves matter toward gas (melting, evaporation, sublimation); removing heat moves it toward solid (condensation, freezing, deposition). Example: dew on grass is condensation; dry ice "smoking" is sublimation.` })),
+  // Experiment variables
+  () => {
+    const [setup, ind, dep, ctrl] = pick([
+      ['A student tests how the amount of sunlight affects how tall bean plants grow.', 'the amount of sunlight', 'the height of the plants', 'the type of bean plant'],
+      ['Maya tests whether water temperature changes how fast sugar dissolves.', 'the water temperature', 'the time it takes sugar to dissolve', 'the amount of sugar used'],
+      ['A class tests how the height of a ramp affects how far a toy car rolls.', 'the height of the ramp', 'the distance the car rolls', 'using the same toy car'],
+      ['Leo tests if the type of fertilizer affects how many tomatoes a plant grows.', 'the type of fertilizer', 'the number of tomatoes', 'the amount of water given'],
+      ['A scientist tests how minutes of exercise affect a person\'s heart rate.', 'the minutes of exercise', 'the heart rate', 'the type of exercise'],
+      ['Ana tests how the number of paper clips on a paper airplane affects how far it flies.', 'the number of paper clips', 'the distance the plane flies', 'the paper airplane design']]);
+    const askInd = Math.random() < .5;
+    return MQ(`${setup}\nWhat is the ${askInd ? 'independent' : 'dependent'} variable?`, askInd ? ind : dep, [askInd ? dep : ind, ctrl, 'the date of the experiment'],
+      `Independent variable = what the scientist CHANGES on purpose (${ind}). Dependent variable = what gets MEASURED as a result (${dep}). Things kept the same, like ${ctrl}, are controlled variables.`);
+  },
+  () => { const rows = [['hydrogen','H'],['helium','He'],['carbon','C'],['nitrogen','N'],['oxygen','O'],['sodium','Na'],['magnesium','Mg'],['aluminum','Al'],['silicon','Si'],['chlorine','Cl'],['potassium','K'],['calcium','Ca'],['iron','Fe'],['copper','Cu'],['silver','Ag'],['gold','Au'],['lead','Pb'],['neon','Ne'],['sulfur','S'],['zinc','Zn']];
+    const note = (e, s) => `The symbol for ${e} is ${s}. Symbols start with a capital letter, and a second letter is lowercase. Some come from Latin names: Na (natrium) = sodium, K (kalium) = potassium, Fe (ferrum) = iron, Cu (cuprum) = copper, Ag (argentum) = silver, Au (aurum) = gold, Pb (plumbum) = lead.`;
+    return Math.random() < .5
+      ? fromTable(rows, ([e, s]) => ({ q: `What is the chemical symbol for ${e}?`, explain: note(e, s) }))
+      : fromTable(rows.map(([e, s]) => [s, e]), ([s, e]) => ({ q: `Which element has the chemical symbol "${s}"?`, explain: note(e, s) })); },
+  () => { const right = ['cell','tissue','organ','organ system','organism'], seen = new Set([right.join(' → ')]), wrongs = [];
+    while (wrongs.length < 3){ const s = shuffle(right).join(' → '); if (!seen.has(s)){ seen.add(s); wrongs.push(s); } }
+    return MQ('Which list puts the levels of organization in order from SMALLEST to LARGEST?', right.join(' → '), wrongs,
+      'Cells group into tissues (like muscle tissue), tissues form organs (the heart), organs work together in organ systems (circulatory system), and systems make up a whole organism (you).'); },
+);
+</script>
+
+<script>
+// ================= 7th GRADE — Social Studies generators =================
+BANK[7]['Social Studies'].push(
+  () => fromTable([['Brazil','South America'],['Kenya','Africa'],['Japan','Asia'],['France','Europe'],['Canada','North America'],['Australia','Australia/Oceania'],['Egypt','Africa'],['India','Asia'],['Argentina','South America'],['Germany','Europe'],['Mexico','North America'],['Nigeria','Africa'],['China','Asia'],['Peru','South America'],['Italy','Europe'],['Vietnam','Asia'],['Chile','South America'],['Spain','Europe'],['Morocco','Africa'],['New Zealand','Australia/Oceania'],['Saudi Arabia','Asia'],['Cuba','North America'],['Colombia','South America'],['Poland','Europe']],
+    ([c, k]) => ({ q: `On which continent is ${c}?`, explain: `${c} is in ${k}. The seven continents are North America, South America, Europe, Africa, Asia, Australia/Oceania, and Antarctica. Picture a world map — practice by tracing each continent and naming a few countries in it.` })),
+  () => fromTable([['France','Paris'],['Japan','Tokyo'],['Egypt','Cairo'],['Brazil','Brasília','not Rio de Janeiro'],['Canada','Ottawa','not Toronto'],['Australia','Canberra','not Sydney'],['Italy','Rome'],['Germany','Berlin'],['China','Beijing'],['India','New Delhi'],['Mexico','Mexico City'],['Russia','Moscow'],['Spain','Madrid'],['Kenya','Nairobi'],['Argentina','Buenos Aires'],['South Korea','Seoul'],['the United Kingdom','London'],['Peru','Lima'],['Greece','Athens'],['Turkey','Ankara','not Istanbul']],
+    ([c, cap, tip]) => ({ q: `What is the capital of ${c}?`, explain: `The capital of ${c} is ${cap}${tip ? ` — ${tip}, even though that city is bigger or more famous` : ''}. A capital is where the national government meets, and it isn't always the largest city.` })),
+  () => fromTable([['built pyramids as tombs for pharaohs','Ancient Egypt'],['wrote hieroglyphics on papyrus','Ancient Egypt'],['wrote in cuneiform on clay tablets','Mesopotamia'],['created Hammurabi\'s Code, one of the first written law codes','Mesopotamia'],['built the Great Wall to keep out invaders','Ancient China'],['invented paper and silk-making','Ancient China'],['started the Olympic Games','Ancient Greece'],['developed democracy in the city-state of Athens','Ancient Greece'],['built aqueducts, roads, and the Colosseum','Ancient Rome'],['created a republic run by an elected Senate','Ancient Rome'],['built Machu Picchu high in the Andes Mountains','Inca Empire'],['built the island city of Tenochtitlan on a lake','Aztec Empire'],['developed an advanced calendar and number system with zero in Central America','Maya civilization'],['planned cities like Mohenjo-daro with drains and sewers','Indus Valley civilization']],
+    ([a, civ]) => ({ q: `Which civilization ${a}?`, explain: `${civ} ${a}. Link each civilization to its location and one big achievement: Egypt–Nile–pyramids, Mesopotamia–rivers–writing & laws, China–Great Wall & paper, Greece–democracy, Rome–republic & engineering, Maya/Aztec/Inca–the Americas.` })),
+  () => whichGroup({
+      'Legislative branch': ['makes the laws','can declare war','approves the federal budget','is made up of the Senate and House of Representatives','can impeach the President'],
+      'Executive branch': ['carries out and enforces the laws','is led by the President','can veto a bill','commands the military','negotiates treaties with other countries'],
+      'Judicial branch': ['decides whether laws follow the Constitution','is headed by the Supreme Court','interprets what laws mean','hears federal court cases'] },
+    (label, item) => ({ q: `Which branch of the U.S. government ${item}?`, explain: `The ${label} ${item}. Remember: Legislative (Congress) = MAKES laws, Executive (President) = ENFORCES laws, Judicial (courts) = INTERPRETS laws.` })),
+  () => fromTable([['land surrounded by water on three sides','peninsula'],['land surrounded by water on all sides','island'],['a chain or group of islands','archipelago'],['a narrow strip of land connecting two larger landmasses','isthmus'],['a narrow waterway connecting two larger bodies of water','strait'],['a large, flat area of land raised above the land around it','plateau'],['land built up where a river empties into a larger body of water','delta'],['a stream or river that flows into a larger river','tributary'],['part of an ocean or lake partly surrounded by land','bay'],['a low area of land between hills or mountains','valley']],
+    ([d, t]) => ({ q: `What geographic feature is ${d}?`, explain: `That's a ${t}. Examples help it stick: Florida is a peninsula, Panama is an isthmus, Hawaii is an archipelago, the Nile has a delta, and the Missouri is a tributary of the Mississippi.` })),
+  () => fromTable([['what you give up when you make a choice','opportunity cost'],['having limited resources but unlimited wants','scarcity'],['how much of a product people want and can afford to buy','demand'],['how much of a product is available to sell','supply'],['trading goods directly without using money','barter'],['a plan for how to spend and save money','budget'],['money paid to the government to fund public services','tax'],['extra money a bank pays you for keeping savings there','interest'],['goods bought from another country','import'],['goods sold to another country','export'],['money a business has left after paying its costs','profit']],
+    ([d, t]) => ({ q: `Which economics term means ${d}?`, explain: `That's ${t}. Try using it in a sentence: if you spend Saturday at a game instead of working, the pay you missed is your opportunity cost.` })),
+  () => fromTable([['was founded by Siddhartha Gautama, the Buddha','Buddhism'],['follows the teachings of Jesus','Christianity'],['follows the prophet Muhammad and the Quran','Islam'],['began with the ancient Hebrews and is based on the Torah','Judaism'],['began in ancient India with beliefs in karma, dharma, and many gods','Hinduism'],['was founded by Guru Nanak in the Punjab region','Sikhism'],['is based on Confucius\'s teachings about respect, family, and good government','Confucianism']],
+    ([d, r]) => ({ q: `Which belief system ${d}?`, explain: `${r} ${d}. Judaism, Christianity, and Islam are monotheistic (one God) and began in the Middle East; Hinduism and Buddhism began in India; Confucianism began in China.` })),
+  // Timeline: which came first / last
+  () => {
+    const ev = [[-3100,'Egypt is united under the first pharaoh'],[-2560,'the Great Pyramid of Giza is built'],[-1754,'Hammurabi\'s Code is written'],[-776,'the first Olympic Games are held in Greece'],[-509,'the Roman Republic is founded'],[-221,'Qin Shi Huang unites China'],[476,'the Western Roman Empire falls'],[1066,'the Normans conquer England'],[1215,'the Magna Carta is signed'],[1347,'the Black Death reaches Europe'],[1440,'Gutenberg develops the printing press'],[1492,'Columbus sails to the Americas'],[1517,'Martin Luther starts the Reformation'],[1521,'Spain conquers the Aztec Empire']];
+    const four = shuffle(ev).slice(0, 4).sort((a, b) => a[0] - b[0]), first = Math.random() < .5;
+    const yr = y => y < 0 ? `${-y} BCE` : `${y} CE`, ans = first ? four[0] : four[3];
+    return MQ(`Which of these happened ${first ? 'FIRST' : 'MOST RECENTLY'}?`, ans[1], four.filter(e => e !== ans).map(e => e[1]),
+      `In order: ${four.map(e => `${e[1]} (${yr(e[0])})`).join(' → ')}. BCE years count DOWN toward year 1, so a bigger BCE number is further in the past (3100 BCE is older than 509 BCE).`);
+  },
+  () => fromGroups({
+      right: ['freedom of speech','a fair trial by jury','practicing any religion','peacefully protesting','freedom of the press'],
+      responsibility: ['obeying laws','paying taxes','serving on a jury when called','respecting the rights of others','staying informed about issues'] },
+    (label, item) => ({ q: `Which of these is a ${label === 'right' ? 'RIGHT' : 'RESPONSIBILITY'} of U.S. citizens?`,
+      explain: `${item[0].toUpperCase() + item.slice(1)} is a ${label}. Rights are freedoms the government protects for you (many are in the Bill of Rights). Responsibilities are things citizens are expected to DO to keep the country working.` })),
+  () => { const lat = R(5, 70), lon = R(5, 170), ns = pick(['N','S']), ew = pick(['E','W']);
+    const H = { N: 'Northern', S: 'Southern', E: 'Eastern', W: 'Western' }, combo = (a, b) => `${H[a]} and ${H[b]}`;
+    return MQ(`A place is located at ${lat}°${ns}, ${lon}°${ew}. Which hemispheres is it in?`, combo(ns, ew), [combo(ns === 'N' ? 'S' : 'N', ew), combo(ns, ew === 'E' ? 'W' : 'E'), combo(ns === 'N' ? 'S' : 'N', ew === 'E' ? 'W' : 'E')],
+      `Latitude (the first number) is measured north or south of the Equator, so ${ns} = ${H[ns]} Hemisphere. Longitude (the second number) is measured east or west of the Prime Meridian, so ${ew} = ${H[ew]} Hemisphere.`); },
+);
+</script>
+
+<script>
+// ================= 7th GRADE — extra Math generators =================
+const gcd = (a, b) => b ? gcd(b, a % b) : Math.abs(a);
+const frac = (n, d) => { const g = gcd(n, d); return d / g === 1 ? String(n / g) : `${n / g}/${d / g}`; };
+BANK[7].Math.push(
+  () => { const a = R(2, 20), b = R(2, 9), c = R(2, 9), d = R(1, 15), v = a + b * c - d;
+    return MQ(`What is ${a} + ${b} × ${c} − ${d}?`, v, [(a + b) * c - d, a + b * (c - d), (a + b) * (c - d)],
+      `Order of operations (PEMDAS): multiply before adding or subtracting. ${b} × ${c} = ${b * c}. Then go left to right: ${a} + ${b * c} = ${a + b * c}, and ${a + b * c} − ${d} = ${v}.`); },
+  () => { const a = R(2, 15), b = R(-5, 25), sym = pick(['>', '<', '≥', '≤']);
+    return MQ(`Solve the inequality:  x + ${a} ${sym} ${b}`, `x ${sym} ${b - a}`, [`x ${sym} ${b + a}`, `x ${{ '>': '<', '<': '>', '≥': '≤', '≤': '≥' }[sym]} ${b - a}`, `x ${sym} ${a - b}`],
+      `Solve it like an equation: subtract ${a} from both sides to get x ${sym} ${b} − ${a}, so x ${sym} ${b - a}. The sign only flips when you multiply or divide by a NEGATIVE number — subtracting doesn't flip it.`); },
+  () => { const d = R(2, 20), c = +(3.14 * d).toFixed(2);
+    return MQ(`What is the circumference of a circle with diameter ${d} in? (π ≈ 3.14)`, fmt(c) + ' in', [fmt(+(3.14 * d * 2).toFixed(2)) + ' in', fmt(+(3.14 * (d / 2) ** 2).toFixed(2)) + ' in', fmt(+(3.14 * d / 2).toFixed(2)) + ' in'],
+      `Circumference = π × diameter (or 2πr). 3.14 × ${d} = ${fmt(c)} in. Be careful: if you're given the diameter, don't double it again.`); },
+  () => { const n = R(4, 6), mean = R(6, 20); let vals;
+    do { vals = Array.from({ length: n - 1 }, () => mean + R(-5, 5)); vals.push(mean * n - vals.reduce((s, v) => s + v, 0)); } while (vals[n - 1] < 1);
+    const sorted = [...vals].sort((a, b) => a - b), sum = mean * n;
+    return MQ(`What is the mean (average) of: ${vals.join(', ')}?`, mean, [sorted[Math.floor(n / 2)], sorted[n - 1] - sorted[0], fmt(sum / (n - 1))],
+      `Mean = add all the values, then divide by how many there are. ${vals.join(' + ')} = ${sum}. There are ${n} numbers, so ${sum} ÷ ${n} = ${mean}. (Middle value = median; biggest − smallest = range.)`); },
+  () => { const P = R(2, 20) * 100, r = pick([2, 3, 4, 5, 6]), t = R(2, 6), I = P * r * t / 100;
+    return MQ(`You put $${P} in a savings account earning ${r}% simple interest per year. How much interest do you earn in ${t} years?`, '$' + fmt(I), ['$' + fmt(P * r / 100), '$' + fmt(P + I), '$' + fmt(P * r * t)],
+      `Simple interest I = P × r × t. Change the rate to a decimal: ${r}% = ${r / 100}. I = ${P} × ${r / 100} × ${t} = $${fmt(I)}. (Your total balance would be $${fmt(P + I)}, but the question asks for just the interest.)`); },
+  () => { const oldP = R(2, 10) * 10, pct = pick([10, 20, 25, 30, 50]), newP = oldP * (100 + pct) / 100, up = Math.random() < .5;
+    const [a, b] = up ? [oldP, newP] : [newP, oldP], change = Math.abs(b - a), p = fmt(change / a * 100) + '%';
+    return MQ(`A price changes from $${fmt(a)} to $${fmt(b)}. What is the percent ${up ? 'increase' : 'decrease'}?`, p, [fmt(change / b * 100) + '%', fmt(change) + '%', fmt(b / a * 100) + '%'],
+      `Percent change = (amount of change ÷ ORIGINAL amount) × 100. The change is $${fmt(change)}, and the original is $${fmt(a)}. ${fmt(change)} ÷ ${fmt(a)} = ${fmt(change / a)} → ${p}. Always divide by the starting value, not the new one.`); },
+  () => { const l = R(2, 12), w = R(2, 10), h = R(2, 9), v = l * w * h;
+    return MQ(`What is the volume of a box that is ${l} cm long, ${w} cm wide, and ${h} cm tall?`, v + ' cm³', [(l + w + h) + ' cm³', 2 * (l * w + l * h + w * h) + ' cm³', l * w + ' cm³'],
+      `Volume of a rectangular prism = length × width × height. ${l} × ${w} × ${h} = ${v} cm³. Volume uses cubic units because you multiplied three lengths. (2lw + 2lh + 2wh would be surface area.)`); },
+  () => { const a = nz(-6, 8), b = nz(-6, 8), m = R(2, 6), n = R(2, 6), v = m * a - n * b;
+    return MQ(`If a = ${a} and b = ${b}, what is ${m}a − ${n}b?`, v, [m * a + n * b, m + a - n + b, m * a - n - b],
+      `Substitute, using parentheses: ${m}(${a}) − ${n}(${b}) = ${m * a} − ${sgn(n * b)} = ${v}. Parentheses keep the negative signs from getting lost.`); },
+  () => { const comp = Math.random() < .5, x = comp ? R(10, 80) : R(20, 160), total = comp ? 90 : 180;
+    return MQ(`Two angles are ${comp ? 'complementary' : 'supplementary'}. One angle is ${x}°. What is the other angle?`, `${total - x}°`, [`${(comp ? 180 : 90) - x}°`, `${x}°`, `${360 - x}°`].filter(s => !s.startsWith('-')),
+      `${comp ? 'Complementary' : 'Supplementary'} angles add up to ${total}°. So ${total}° − ${x}° = ${total - x}°. Memory trick: C comes before S, and 90 comes before 180 (Complementary = 90, Supplementary = 180).`); },
+  () => { const k = pick([5, 10, 20, 25, 50]), inches = R(2, 12) + pick([0, 0.5]), miles = inches * k;
+    return MQ(`On a map, 1 inch = ${k} miles. Two towns are ${fmt(inches)} inches apart on the map. How far apart are they really?`, fmt(miles) + ' miles', [fmt(inches + k) + ' miles', fmt(k / inches) + ' miles', fmt(miles / 2) + ' miles'],
+      `Each inch stands for ${k} miles, so multiply: ${fmt(inches)} × ${k} = ${fmt(miles)} miles. Set it up as a proportion if it helps: 1/${k} = ${fmt(inches)}/x.`); },
+  () => { const d1 = pick([2, 3, 4, 5, 6]), d2 = pick([3, 4, 5, 6, 8].filter(d => d !== d1)), n1 = R(1, d1 - 1), n2 = R(1, d2 - 1), num = n1 * d2 + n2 * d1, den = d1 * d2;
+    return MQ(`What is ${n1}/${d1} + ${n2}/${d2}? (simplest form)`, frac(num, den), [`${n1 + n2}/${d1 + d2}`, frac(n1 + n2, den), frac(num, den + 1)],
+      `You can't add the tops and bottoms. First get a common denominator: ${n1}/${d1} = ${n1 * d2}/${den} and ${n2}/${d2} = ${n2 * d1}/${den}. Add the numerators: ${n1 * d2 + n2 * d1}/${den}, then simplify to ${frac(num, den)}.`); },
+);
+</script>
+
+<script>
+// ================= 8th GRADE — English generators =================
+BANK[8].English.push(
+  () => fromTable([['chron','time','chronological'],['bio','life','biography'],['geo','earth','geology'],['graph','write','autograph'],['tele','far','telescope'],['photo','light','photosynthesis'],['phon','sound','symphony'],['port','carry','portable'],['dict','say','contradict'],['spect','look','spectator'],['rupt','break','erupt'],['aqua','water','aquarium'],['therm','heat','thermostat'],['struct','build','construction'],['ject','throw','projectile'],['mal','bad','malfunction'],['bene','good','benefit'],['cred','believe','credible'],['manu','hand','manuscript'],['astro','star','astronomy'],['ped','foot','pedestrian']],
+    ([r, m, ex]) => ({ q: `The root "${r}" in "${ex}" means:`, explain: `"${r}" means "${m}" — so "${ex}" has to do with "${m}". Knowing Greek and Latin roots lets you decode big words: tele (far) + scope (look) = telescope.` })),
+  () => { const rows = [['Swimming is my favorite sport.','Swimming','gerund'],['She enjoys reading mystery novels.','reading','gerund'],['Cheating is against the rules.','Cheating','gerund'],['His hobby is collecting coins.','collecting','gerund'],
+      ['The barking dog woke the neighbors.','barking','participle'],['We sat by the crackling fire.','crackling','participle'],['The broken vase lay on the floor.','broken','participle'],['Exhausted, the runners crossed the finish line.','Exhausted','participle'],
+      ['I want to learn Spanish.','to learn','infinitive'],['Her goal is to become a doctor.','to become','infinitive'],['They decided to leave early.','to leave','infinitive'],['To win, we must practice every day.','To win','infinitive']];
+    const [s, w, t] = pick(rows);
+    return MQ(`In "${s}", what kind of verbal is "${w}"?`, t, ['gerund','participle','infinitive','main verb'].filter(x => x !== t),
+      `"${w}" is ${t === 'infinitive' ? 'an' : 'a'} ${t}. Gerund = -ing verb used as a NOUN (a thing you can do). Participle = verb form used as an ADJECTIVE (describes a noun, like "barking dog"). Infinitive = "to" + verb.`); },
+  () => { const agents = ['the coach','the chef','my sister','the mayor','a famous artist','the students'], acts = [['wrote','written','the letter'],['broke','broken','the window'],['painted','painted','the fence'],['cooked','cooked','dinner'],['won','won','the trophy'],['planted','planted','the garden'],['fixed','fixed','the bike']];
+    const cap = s => s[0].toUpperCase() + s.slice(1);
+    const act = (a, [v, , o]) => `${cap(a)} ${v} ${o}.`, pas = (a, [, pp, o]) => `${cap(o)} was ${pp} by ${a}.`;
+    const combos = shuffle(agents).slice(0, 4).map((a, i) => [a, shuffle(acts)[i]]), wantPassive = Math.random() < .5;
+    const [ra, rv] = combos[0], right = wantPassive ? pas(ra, rv) : act(ra, rv);
+    return MQ(`Which sentence is written in the ${wantPassive ? 'PASSIVE' : 'ACTIVE'} voice?`, right, combos.slice(1).map(([a, v]) => wantPassive ? act(a, v) : pas(a, v)),
+      `"${right}" is ${wantPassive ? 'passive' : 'active'}. Active voice: the subject DOES the action ("${act(ra, rv)}"). Passive voice: the subject RECEIVES the action, usually with "was ___ by" ("${pas(ra, rv)}").`); },
+  () => { const [c, ...w] = pick([['separate','seperate','separete','seprate'],['definitely','definately','definitly','defenitely'],['receive','recieve','receeve','receve'],['occurrence','occurence','occurrance','ocurrence'],['embarrass','embarass','embarras','embaress'],['calendar','calender','calandar','calander'],['beginning','begining','beggining','beginnig'],['believe','beleive','belive','beleve'],['government','goverment','govermant','governmint'],['environment','enviroment','envirnment','environmint'],['tomorrow','tommorow','tomorow','tommorrow'],['rhythm','rythm','rhythem','rythem'],['weird','wierd','weerd','wierde'],['accommodate','accomodate','acommodate','acomodate'],['argument','arguement','argumant','arguemint']]);
+    const tips = { separate: 'there is "a rat" in sep-A-R-A-te', definitely: 'it contains the word "finite"', receive: '"i before e, except after c"', embarrass: 'you turn Really Red and feel Silly Silly', beginning: 'begin + n + ing (double the n)', believe: "don't beLIEve a LIE", government: 'it comes from "govern" + "ment"', environment: 'it contains "iron": envIRONment', weird: "it's a weird word — it breaks the i-before-e rule", accommodate: 'it is big enough for two c\'s and two m\'s', argument: 'you drop the e from "argue"', calendar: 'it ends in -ar like "January"' };
+    return MQ('Which word is spelled correctly?', c, w, `The correct spelling is "${c}".${tips[c] ? ` Memory trick: ${tips[c]}.` : ' Break it into syllables and picture each one.'}`); },
+  () => { const subjects = [['Each of the players', 1], ['Neither of the answers', 1], ['The box of crayons', 1], ['Everyone in the class', 1], ['One of my friends', 1], ['The teacher, along with her students,', 1],
+      ['Both of the dogs', 0], ['The players on the team', 0], ['My brother and sister', 0], ['Several of the books', 0], ['The students in the band', 0]];
+    const [v1, v0, tail] = pick([['is', 'are', 'ready'], ['has', 'have', 'a question'], ['was', 'were', 'late'], ['wants', 'want', 'pizza'], ['plays', 'play', 'outside']]);
+    const four = shuffle(subjects).slice(0, 4), s = (subj, sing, ok) => `${subj} ${(sing ? ok : !ok) ? v1 : v0} ${tail}.`;
+    const [cs, cn] = four[0], right = s(cs, cn, true);
+    return MQ('Which sentence has correct subject-verb agreement?', right, four.slice(1).map(([x, n]) => s(x, n, false)),
+      `"${right}" is correct because "${cs.replace(/,$/, '')}" is ${cn ? 'SINGULAR' : 'PLURAL'}. Tricks: cross out phrases like "of the ___" or "along with ___" to find the real subject. Each, everyone, neither, and one are singular; both, several, and subjects joined by "and" are plural.`); },
+  () => fromTable([['a hint about what will happen later in the story','foreshadowing'],['a scene that jumps back to show earlier events','flashback'],['when the audience knows something a character does not','dramatic irony'],['when the opposite of what you expect happens','situational irony'],['the struggle between opposing forces in a story','conflict'],['the main character of a story','protagonist'],['the character or force working against the main character','antagonist'],['a reference to a well-known person, place, event, or work','allusion'],['the feeling a reader gets from a text','mood'],['the author\'s attitude toward the subject','tone'],['an object that stands for a bigger idea','symbol'],['a character who changes in an important way during the story','dynamic character'],['the lesson or message about life the story shows','theme']],
+    ([d, t]) => ({ q: `Which literary term means ${d}?`, explain: `That's ${t}. Make a flash card for each literary term with a short example from a book or movie you know — examples stick better than definitions.` })),
+  () => { const [pos, neu, neg] = pick([['confident','sure of oneself','arrogant'],['curious','interested','nosy'],['slender','thin','skinny'],['determined','persistent','stubborn'],['thrifty','careful with money','cheap'],['youthful','young','childish'],['aroma','smell','stench'],['relaxed','calm','lazy'],['talkative','chatty','loud-mouthed'],['unique','different','weird']]);
+    const wantNeg = Math.random() < .5, ans = wantNeg ? neg : pos;
+    return MQ(`These words have similar meanings. Which has the most ${wantNeg ? 'NEGATIVE' : 'POSITIVE'} connotation?`, ans, [neu, wantNeg ? pos : neg],
+      `Denotation is the dictionary meaning; connotation is the feeling a word carries. "${pos}" sounds positive, "${neu}" is fairly neutral, and "${neg}" sounds negative. Writers pick words by connotation to shape how you feel.`); },
+  () => { const [s, right, wrong] = pick([['Mom took my brother and ___ to the movies.','me','I'],['My friend and ___ went to the mall.','I','me'],['This is a secret between you and ___.','me','I'],['The coach gave the award to Jordan and ___.','me','I'],['Who gave the tickets to Maria and ___?','her','she'],['Sam and ___ went to soccer practice.','she','her'],['The teacher asked Leo and ___ to stay after class.','him','he'],['Dad and ___ built a birdhouse.','he','him']]);
+    return MQ(`Which pronoun correctly fills the blank?\n"${s}"`, right, [wrong, right === 'me' || right === 'I' ? 'myself' : wrong === 'she' || wrong === 'her' ? 'herself' : 'himself'],
+      `"${right}" is correct. The trick: cover up the other person and read it alone — "${s.replace(/\b(my brother|My friend|you|Jordan|Maria|Sam|Leo|Dad) and ___/i, '___').replace('___', right === 'I' || right === 'she' || right === 'he' ? right[0].toUpperCase() + right.slice(1) : right)}" Subjects use I/she/he; objects (after verbs or words like "to" and "between") use me/her/him.`); },
+);
+</script>
+
+<script>
+// ================= 8th GRADE — Science generators =================
+BANK[8].Science.push(
+  () => { const m = R(2, 20), a = R(2, 12), F = m * a, ask = pick(['F', 'm', 'a']);
+    if (ask === 'F') return MQ(`A ${m} kg object accelerates at ${a} m/s². What net force is acting on it? (F = ma)`, F + ' N', [m + a + ' N', fmt(m / a) + ' N', F * 2 + ' N'],
+      `F = m × a = ${m} kg × ${a} m/s² = ${F} N. Force is measured in newtons (N).`);
+    if (ask === 'm') return MQ(`A ${F} N force gives an object an acceleration of ${a} m/s². What is its mass? (F = ma)`, m + ' kg', [F * a + ' kg', F - a + ' kg', a + ' kg'],
+      `Rearrange F = ma to m = F ÷ a. m = ${F} N ÷ ${a} m/s² = ${m} kg. Cover the letter you want in the F-m-a triangle: F on top, m and a on the bottom.`);
+    return MQ(`A ${F} N force pushes a ${m} kg cart. What is its acceleration? (F = ma)`, a + ' m/s²', [F * m + ' m/s²', F - m + ' m/s²', fmt(m / F) + ' m/s²'],
+      `Rearrange F = ma to a = F ÷ m. a = ${F} N ÷ ${m} kg = ${a} m/s².`); },
+  () => { const s = R(3, 30) * pick([1, 2, 5]), t = R(2, 9), d = s * t, ask = pick(['s', 'd', 't']), unit = pick([['km', 'h'], ['m', 's']]), [du, tu] = unit;
+    if (ask === 's') return MQ(`An object travels ${d} ${du} in ${t} ${tu}. What is its average speed?`, `${s} ${du}/${tu}`, [`${d * t} ${du}/${tu}`, `${d + t} ${du}/${tu}`, `${fmt(t / d)} ${du}/${tu}`], `Speed = distance ÷ time = ${d} ÷ ${t} = ${s} ${du}/${tu}.`);
+    if (ask === 'd') return MQ(`A cyclist moves at ${s} ${du}/${tu} for ${t} ${tu}. How far does the cyclist go?`, `${d} ${du}`, [`${s + t} ${du}`, `${fmt(s / t)} ${du}`, `${d * 2} ${du}`], `Distance = speed × time = ${s} × ${t} = ${d} ${du}. The "${tu}" units cancel, leaving ${du}.`);
+    return MQ(`How long does it take to travel ${d} ${du} at ${s} ${du}/${tu}?`, `${t} ${tu}`, [`${d * s} ${tu}`, `${d - s} ${tu}`, `${t + 2} ${tu}`], `Time = distance ÷ speed = ${d} ÷ ${s} = ${t} ${tu}.`); },
+  () => { const v = R(2, 20), dens = pick([0.5, 0.8, 1.5, 2, 2.5, 3, 4, 7.8, 11.3]), mass = +(dens * v).toFixed(2), floats = dens < 1;
+    return Math.random() < .5
+      ? MQ(`An object has a mass of ${fmt(mass)} g and a volume of ${v} cm³. What is its density?`, fmt(dens) + ' g/cm³', [fmt(+(mass * v).toFixed(2)) + ' g/cm³', fmt(+(v / mass).toFixed(2)) + ' g/cm³', fmt(+(mass - v).toFixed(2)) + ' g/cm³'],
+          `Density = mass ÷ volume = ${fmt(mass)} g ÷ ${v} cm³ = ${fmt(dens)} g/cm³.`)
+      : MQ(`An object has a mass of ${fmt(mass)} g and a volume of ${v} cm³. Will it float or sink in water (density 1 g/cm³)?`, floats ? 'Float' : 'Sink', [floats ? 'Sink' : 'Float', 'It depends on the shape only'],
+          `First find density: ${fmt(mass)} ÷ ${v} = ${fmt(dens)} g/cm³. Water is 1 g/cm³. Objects LESS dense than water float; MORE dense objects sink. ${fmt(dens)} is ${floats ? 'less' : 'more'} than 1, so it ${floats ? 'floats' : 'sinks'}.`); },
+  () => { const [el, Z, A] = pick([['carbon',6,12],['oxygen',8,16],['sodium',11,23],['aluminum',13,27],['chlorine',17,35],['calcium',20,40],['iron',26,56],['nitrogen',7,14],['magnesium',12,24],['fluorine',9,19],['neon',10,20],['sulfur',16,32],['potassium',19,39],['lithium',3,7],['helium',2,4]]);
+    const ask = pick(['protons', 'neutrons', 'electrons']), ans = ask === 'neutrons' ? A - Z : Z;
+    return MQ(`A neutral atom of ${el} has atomic number ${Z} and mass number ${A}. How many ${ask} does it have?`, ans, [A, A + Z, ask === 'neutrons' ? Z : A - Z],
+      `Protons = atomic number = ${Z}. In a neutral atom, electrons = protons = ${Z}. Neutrons = mass number − atomic number = ${A} − ${Z} = ${A - Z}. So ${ask} = ${ans}.`); },
+  () => { const a = R(5, 60), b = R(5, 60), p1 = R(3, a + b - 3);
+    return Math.random() < .5
+      ? MQ(`In a closed container, ${a} g of one substance reacts completely with ${b} g of another. What is the total mass of the products?`, (a + b) + ' g', [Math.abs(a - b) + ' g', a + ' g', (a + b) * 2 + ' g'],
+          `By the Law of Conservation of Mass, mass isn't created or destroyed — atoms just rearrange. Products = reactants = ${a} + ${b} = ${a + b} g.`)
+      : MQ(`${a + b} g of reactants form two products in a closed system. One product has a mass of ${p1} g. What is the mass of the other product?`, (a + b - p1) + ' g', [(a + b + p1) + ' g', p1 + ' g', (a + b) + ' g'],
+          `Total mass stays the same (conservation of mass): ${a + b} g total − ${p1} g = ${a + b - p1} g.`); },
+  () => whichGroup({
+      "Newton's 1st Law (inertia)": ['A passenger lurches forward when a bus suddenly stops.','A hockey puck keeps sliding across the ice until friction slows it.','A magician yanks a tablecloth away and the dishes stay put.','You slide sideways in your seat when a car turns sharply.'],
+      "Newton's 2nd Law (F = ma)": ['It takes more force to push a full shopping cart than an empty one.','A baseball hit harder speeds up more.','A small car speeds up faster than a heavy truck pushed with the same force.'],
+      "Newton's 3rd Law (action–reaction)": ['A rocket pushes gas down, and the gas pushes the rocket up.','A swimmer pushes water backward and moves forward.','When you jump off a small boat, the boat moves backward.','A balloon zooms away as air rushes out the other end.'] },
+    (label, s) => ({ q: `Which law of motion does this best show?\n"${s}"`, explain: `This shows ${label}. 1st Law: objects keep doing what they're doing unless a force acts (inertia). 2nd Law: more force = more acceleration, more mass = less acceleration. 3rd Law: every action has an equal and opposite reaction.` })),
+  () => fromGroups({
+      kinetic: ['a car speeding down the highway','a flowing river','a baseball flying through the air','a spinning ceiling fan','a runner sprinting'],
+      potential: ['a stretched rubber band','a book sitting on a high shelf','water held behind a dam','a compressed spring','a roller coaster paused at the top of a hill'] },
+    (label, item) => ({ q: `Which of these is the best example of ${label.toUpperCase()} energy?`, explain: `${item[0].toUpperCase() + item.slice(1)} shows ${label} energy. Kinetic = energy of MOTION (it's moving). Potential = STORED energy from position or shape (it's high up, stretched, or squished and could move).` })),
+  () => fromTable([['the height of a wave from its resting position to its crest','amplitude'],['the distance from one crest to the next crest','wavelength'],['the number of waves that pass a point each second','frequency'],['the highest point of a wave','crest'],['the lowest point of a wave','trough'],['a wave bouncing off a surface','reflection'],['a wave bending as it moves into a new material','refraction'],['the material a wave travels through, like air or water','medium']],
+    ([d, t]) => ({ q: `Which wave term means ${d}?`, explain: `That's ${t}. Sketch a wave and label it: crest (top), trough (bottom), amplitude (height), wavelength (crest to crest). Bigger amplitude = louder sound or brighter light; higher frequency = higher pitch.` })),
+  () => fromTable([['plates moving apart and forming new crust, like the Mid-Atlantic Ridge','divergent boundary'],['plates pushing together to form mountains or trenches','convergent boundary'],['plates sliding past each other, like the San Andreas Fault','transform boundary'],['a break in Earth\'s crust where rocks have moved','fault'],['the point on the surface directly above where an earthquake starts','epicenter'],['melted rock found below Earth\'s surface','magma'],['the supercontinent that broke apart about 200 million years ago','Pangaea'],['the slow flow of hot rock in the mantle that moves the plates','convection currents']],
+    ([d, t]) => ({ q: `What Earth science term describes ${d}?`, explain: `That's ${t}. Plate boundaries: DIvergent = plates DIvide, CONvergent = plates COme together, TRANSform = plates slide past (TRANSfer sideways).` })),
+  () => fromTable([['the largest planet in our solar system','Jupiter'],['the planet closest to the Sun','Mercury'],['the hottest planet because of its thick, cloudy atmosphere','Venus'],['known as the "Red Planet"','Mars'],['famous for its huge, bright rings','Saturn'],['the planet that rotates tipped on its side','Uranus'],['the farthest planet from the Sun','Neptune'],['a ball of ice and dust that grows a glowing tail near the Sun','a comet'],['a rocky object orbiting the Sun, mostly between Mars and Jupiter','an asteroid'],['a system of billions of stars held together by gravity','a galaxy']],
+    ([d, t]) => ({ q: `Which of these is ${d}?`, explain: `The answer is ${t}. Planet order from the Sun: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune — "My Very Educated Mother Just Served Us Nachos."` })),
+  () => whichGroup({
+      conduction: ['a metal spoon getting hot in a bowl of soup','your hand warming up on a hot mug','an ice cube melting in your palm'],
+      convection: ['warm air rising from a heater and cool air sinking','water circulating in a boiling pot','a sea breeze blowing toward land'],
+      radiation: ["feeling the Sun's warmth on your face",'warming your hands near a campfire without touching it','heat from a red-hot toaster coil reaching bread'] },
+    (label, item) => ({ q: `How is heat mainly transferred here: ${item}?`, explain: `This is ${label}. Conduction = heat moving through direct TOUCH. Convection = heat carried by moving liquids or gases (currents). Radiation = heat traveling as waves, even through empty space.` })),
+);
+</script>
+
+<script>
+// ================= 8th GRADE — Social Studies generators =================
+BANK[8]['Social Studies'].push(
+  () => fromTable([['freedom of speech, religion, and the press','1st Amendment'],['the right to bear arms','2nd Amendment'],['protection from unreasonable searches and seizures','4th Amendment'],['the right to remain silent and not be tried twice for the same crime','5th Amendment'],['the right to a speedy public trial and a lawyer','6th Amendment'],['protection from cruel and unusual punishment','8th Amendment'],['giving powers not listed for the federal government to the states or people','10th Amendment'],['abolishing slavery in the United States','13th Amendment'],['equal protection of the laws for all citizens','14th Amendment'],['giving women the right to vote','19th Amendment'],['limiting the President to two terms','22nd Amendment']],
+    ([d, a]) => ({ q: `Which amendment is known for ${d}?`, explain: `The ${a} covers ${d}. The first ten amendments were added together in 1791 as the Bill of Rights; later ones (13th, 14th, 19th, 22nd) expanded or changed rights over time.` })),
+  () => fromTable([['commanded the Continental Army and became the first President','George Washington'],['is called the "Father of the Constitution"','James Madison'],['wrote the pamphlet Common Sense urging independence','Thomas Paine'],['was President during the Civil War','Abraham Lincoln'],['escaped slavery and led others to freedom on the Underground Railroad','Harriet Tubman'],['escaped slavery and became a famous abolitionist speaker and writer','Frederick Douglass'],["wrote Uncle Tom's Cabin, turning many Northerners against slavery",'Harriet Beecher Stowe'],['commanded the Confederate army','Robert E. Lee'],['led the Union army to victory and later became President','Ulysses S. Grant'],['helped guide the Lewis and Clark expedition as a Shoshone interpreter','Sacagawea'],['was the first Secretary of the Treasury and created a national bank','Alexander Hamilton'],['invented the cotton gin, which made slavery more profitable in the South','Eli Whitney'],['was President during the Louisiana Purchase','Thomas Jefferson'],['warned European nations not to colonize the Americas in his famous doctrine','James Monroe'],['signed the Indian Removal Act as President','Andrew Jackson'],['rode at night to warn colonists that British troops were coming','Paul Revere']],
+    ([d, p]) => ({ q: `Who ${d}?`, explain: `${p} ${d}. Try grouping people by era — Revolution (Washington, Paine, Revere), new nation (Madison, Hamilton, Jefferson, Monroe, Jackson), and Civil War (Lincoln, Lee, Grant, Tubman, Douglass, Stowe).` })),
+  () => { const ev = [[1607,'Jamestown is founded'],[1620,'the Pilgrims arrive on the Mayflower'],[1754,'the French and Indian War begins'],[1765,'Parliament passes the Stamp Act'],[1773,'the Boston Tea Party'],[1775,'the battles of Lexington and Concord'],[1776,'the Declaration of Independence is signed'],[1781,'the British surrender at Yorktown'],[1787,'the Constitution is written'],[1791,'the Bill of Rights is added'],[1803,'the Louisiana Purchase'],[1812,'the War of 1812 begins'],[1830,'the Indian Removal Act is passed'],[1846,'the Mexican-American War begins'],[1848,'gold is discovered in California'],[1861,'the Civil War begins at Fort Sumter'],[1863,'the Battle of Gettysburg'],[1865,'the Civil War ends'],[1869,'the transcontinental railroad is completed'],[1877,'Reconstruction ends']];
+    if (Math.random() < .5){
+      const [y, e] = pick(ev), near = shuffle(ev.filter(x => x[0] !== y)).slice(0, 3).map(x => x[0]);
+      return MQ(`In what year did this happen: ${e}?`, y, near, `${e[0].toUpperCase() + e.slice(1)} happened in ${y}. Anchor dates help: 1776 (independence), 1787 (Constitution), 1861–1865 (Civil War). Place other events before or after those.`);
+    }
+    const four = shuffle(ev).slice(0, 4).sort((a, b) => a[0] - b[0]), first = Math.random() < .5, ans = first ? four[0] : four[3];
+    return MQ(`Which of these happened ${first ? 'FIRST' : 'LAST'}?`, ans[1], four.filter(e => e !== ans).map(e => e[1]),
+      `In order: ${four.map(e => `${e[1]} (${e[0]})`).join(' → ')}. Think about cause and effect — taxes led to protests, protests led to war, war led to independence.`); },
+  () => fromTable([['a protest where colonists dumped British tea into the harbor','the Boston Tea Party'],['the idea that the government gets its power from the people','popular sovereignty'],["the President's power to reject a bill passed by Congress",'veto'],['the power of courts to decide whether laws are constitutional','judicial review'],['states leaving the Union, as Southern states did in 1860–61','secession'],['the movement to end slavery','abolition'],['a secret network that helped enslaved people escape to freedom','the Underground Railroad'],['a tax on imported goods','tariff'],['the 1820 deal that admitted Missouri as a slave state and Maine as a free state','the Missouri Compromise'],['the Revolutionary War battle that convinced France to join the American side','the Battle of Saratoga'],['the Civil War battle in Pennsylvania that turned the war toward the Union','the Battle of Gettysburg'],['laws in the South that enforced racial segregation after Reconstruction','Jim Crow laws'],['the 1803 Supreme Court case that established judicial review','Marbury v. Madison'],['the 1857 Supreme Court case that said enslaved people were not citizens','Dred Scott v. Sandford'],['the formal approval of the Constitution by the states','ratification']],
+    ([d, t]) => ({ q: `Which term or event matches this description: ${d}?`, explain: `That's ${t}. When you study, connect each term to WHY it mattered — for example, the Dred Scott decision angered the North and pushed the country closer to civil war.` })),
+  () => fromGroups({
+      'the Union (North)': ['had far more factories','had a much larger population','had most of the nation\'s railroads','had a strong navy that blockaded ports','had its capital in Washington, D.C.'],
+      'the Confederacy (South)': ['had many experienced military officers','fought mostly on its own home territory','had an economy built on cotton plantations','had its capital in Richmond, Virginia','was led by President Jefferson Davis'] },
+    (label, item) => ({ q: `Which of these describes ${label} during the Civil War?`, explain: `${label[0].toUpperCase() + label.slice(1)} ${item}. The North had the industry, people, and railroads to win a long war; the South had skilled generals and the advantage of defending its own land.` })),
+  () => fromGroups({
+      Federalists: ['supported ratifying the Constitution right away','wanted a strong national government','wrote The Federalist Papers','included Alexander Hamilton and James Madison'],
+      'Anti-Federalists': ['feared a strong central government would become like a king','demanded a Bill of Rights be added','wanted more power kept by the states','included Patrick Henry'] },
+    (label, item) => ({ q: `Which of these describes the ${label}?`, explain: `The ${label} ${item}. Federalists = for the new Constitution and a strong federal government. Anti-Federalists = worried about losing rights, so they pushed for the Bill of Rights — and got it.` })),
+  () => fromTable([['California','Sacramento'],['Texas','Austin'],['New York','Albany'],['Florida','Tallahassee'],['Illinois','Springfield'],['Pennsylvania','Harrisburg'],['Washington','Olympia'],['Nevada','Carson City'],['Kentucky','Frankfort'],['Michigan','Lansing'],['Georgia','Atlanta'],['Massachusetts','Boston'],['Ohio','Columbus'],['Arizona','Phoenix'],['Colorado','Denver'],['Virginia','Richmond'],['Oregon','Salem'],['Missouri','Jefferson City'],['Louisiana','Baton Rouge'],['Alaska','Juneau']],
+    ([s, c]) => ({ q: `What is the capital of ${s}?`, explain: `The capital of ${s} is ${c}. Many state capitals aren't the biggest city (New York's is Albany, not New York City; California's is Sacramento, not Los Angeles).` })),
+  () => whichGroup({
+      'New England Colonies': ['had rocky soil, so people fished, built ships, and traded','included Massachusetts and Connecticut','governed local matters with town meetings'],
+      'Middle Colonies': ['were called the "breadbasket" for growing wheat','included Pennsylvania and New York','were known for religious and ethnic diversity'],
+      'Southern Colonies': ['grew cash crops like tobacco and rice on plantations','included Virginia and Georgia','relied heavily on enslaved labor'] },
+    (label, item) => ({ q: `Which colonies ${item}?`, explain: `The ${label} ${item}. Geography shaped each region: New England's cold, rocky land → sea trade; the Middle's fertile soil → grain; the South's warm, long growing season → plantations.` })),
+);
+</script>
+
+<script>
+// ================= 8th GRADE — extra Math generators =================
+BANK[8].Math.push(
+  () => { const b = R(2, 9), m = R(2, 5), n = R(2, 4);
+    return MQ(`Simplify:  (${b}^${m})^${n}`, `${b}^${m * n}`, [`${b}^${m + n}`, `${b * n}^${m}`, `${b}^${m ** n}`],
+      `A power raised to a power: keep the base and MULTIPLY the exponents. (${b}^${m})^${n} = ${b}^(${m}×${n}) = ${b}^${m * n}. You add exponents only when multiplying two powers with the same base.`); },
+  () => { const b = pick([2, 3, 4, 5, 10]), n = R(1, 3), zero = Math.random() < .25;
+    if (zero) return MQ(`What is ${b}^0?`, 1, [0, b, `1/${b}`], `Any nonzero number to the 0 power equals 1. Pattern: ${b}³ = ${b ** 3}, ${b}² = ${b ** 2}, ${b}¹ = ${b}, ${b}⁰ = 1 — each step divides by ${b}.`);
+    return MQ(`What is ${b}^(−${n})?`, `1/${b ** n}`, [`−${b ** n}`, `−${b * n}`, `1/${b * n}`],
+      `A negative exponent means "flip it" (take the reciprocal), not "make it negative". ${b}^(−${n}) = 1/${b}^${n} = 1/${b ** n}.`); },
+  () => { const a = R(1, 4), b = R(2, 3), m = R(2, 6), n = R(2, 6), p = a * b;
+    return MQ(`Multiply:  (${a} × 10^${m}) × (${b} × 10^${n})`, `${p} × 10^${m + n}`, [`${p} × 10^${m * n}`, `${a + b} × 10^${m + n}`, `${p} × 10^${Math.abs(m - n)}`],
+      `Multiply the front numbers: ${a} × ${b} = ${p}. Multiply the powers of ten by ADDING exponents: 10^${m} × 10^${n} = 10^${m + n}. Answer: ${p} × 10^${m + n}.`); },
+  () => { const m = nz(-4, 5), b = R(-6, 8), rows = [0, 1, 2, 3].map(x => `x = ${x} → y = ${m * x + b}`);
+    return MQ(`What is the rate of change (slope) in this table?\n${rows.join('\n')}`, m, [b, -m, m * 2],
+      `Rate of change = change in y ÷ change in x. Each time x goes up by 1, y changes by ${m * 1 + b} − ${sgn(b)} = ${m}. So the slope is ${m}. (${b} is the y-value when x = 0 — that's the y-intercept.)`); },
+  () => { const a = R(2, 7), bb = nz(-6, 6), x = R(-5, 8), c = a * (x + bb);
+    return MQ(`Solve for x:  ${a}(x ${bb < 0 ? '−' : '+'} ${Math.abs(bb)}) = ${c}`, x, [c / a + bb, x + bb, (c - bb) / a | 0],
+      `Distribute or divide first. Dividing both sides by ${a}: x ${bb < 0 ? '−' : '+'} ${Math.abs(bb)} = ${c / a}. Then ${bb < 0 ? 'add' : 'subtract'} ${Math.abs(bb)}: x = ${x}.`); },
+  () => { const r = R(1, 6) * 3, h = R(1, 5) * 3, v = +(3.14 * r * r * h / 3).toFixed(2);
+    return MQ(`Find the volume of a cone with radius ${r} cm and height ${h} cm. (π ≈ 3.14)`, fmt(v) + ' cm³', [fmt(+(3.14 * r * r * h).toFixed(2)) + ' cm³', fmt(+(3.14 * r * h / 3).toFixed(2)) + ' cm³', fmt(+(3.14 * r * r * h / 2).toFixed(2)) + ' cm³'],
+      `Volume of a cone = (1/3)πr²h — exactly one-third of a cylinder with the same base and height. (1/3) × 3.14 × ${r}² × ${h} = (1/3) × 3.14 × ${r * r} × ${h} = ${fmt(v)} cm³.`); },
+  () => { const [a, b, c] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17], [9, 12, 15], [7, 24, 25], [12, 16, 20]]);
+    return MQ(`A right triangle has a hypotenuse of ${c} and one leg of ${a}. How long is the other leg?`, b, [c - a, c + a, c * c - a * a],
+      `Use a² + b² = c² and solve for the missing leg: b² = c² − a² = ${c * c} − ${a * a} = ${b * b}. Then b = √${b * b} = ${b}. Subtract the squares — not the side lengths.`); },
+  () => { const [a, b, c] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 6, 10]]), x1 = R(-5, 3), y1 = R(-5, 3), sx = pick([1, -1]), sy = pick([1, -1]), x2 = x1 + sx * a, y2 = y1 + sy * b;
+    return MQ(`What is the distance between (${x1}, ${y1}) and (${x2}, ${y2})?`, c, [a + b, a * a + b * b, Math.abs(x2 + y2 - x1 - y1)],
+      `Draw a right triangle between the points. Horizontal leg = |${x2} − ${sgn(x1)}| = ${a}, vertical leg = |${y2} − ${sgn(y1)}| = ${b}. Then use the Pythagorean theorem: √(${a}² + ${b}²) = √${a * a + b * b} = ${c}.`); },
+  () => fromGroups({ rational: ['√49', '0.75', '−3/8', '5.121212… (repeating)', '√0.25', '−12'], irrational: ['√2', 'π', '√15', '0.1010010001… (never repeats)', '√50'] },
+    (label, item) => ({ q: `Which of these numbers is ${label.toUpperCase()}?`, explain: `${item} is ${label}. Rational numbers can be written as a fraction of integers — that includes whole numbers, terminating decimals, repeating decimals, and square roots of perfect squares (√49 = 7). Irrational numbers never end or repeat, like π and √ of non-perfect squares.` })),
+  () => { const lo = R(2, 11), n = R(lo * lo + 1, (lo + 1) ** 2 - 1);
+    return MQ(`Between which two whole numbers is √${n}?`, `${lo} and ${lo + 1}`, [`${lo - 1} and ${lo}`, `${lo + 1} and ${lo + 2}`, `${Math.floor(n / 2)} and ${Math.floor(n / 2) + 1}`],
+      `Find the perfect squares around ${n}: ${lo}² = ${lo * lo} and ${lo + 1}² = ${(lo + 1) ** 2}. Since ${lo * lo} < ${n} < ${(lo + 1) ** 2}, √${n} is between ${lo} and ${lo + 1}.`); },
+  () => { const x = R(-6, 6), y = R(-6, 6), kind = pick(['translate', 'x-axis', 'y-axis']), a = nz(-5, 5), b = nz(-5, 5);
+    if (kind === 'translate') return MQ(`Point (${x}, ${y}) is translated ${Math.abs(a)} units ${a > 0 ? 'right' : 'left'} and ${Math.abs(b)} units ${b > 0 ? 'up' : 'down'}. Where does it land?`, `(${x + a}, ${y + b})`, [`(${x + b}, ${y + a})`, `(${x - a}, ${y - b})`, `(${x + a}, ${y - b})`],
+      `Left/right changes x; up/down changes y. x: ${x} ${a > 0 ? '+' : '−'} ${Math.abs(a)} = ${x + a}. y: ${y} ${b > 0 ? '+' : '−'} ${Math.abs(b)} = ${y + b}. New point: (${x + a}, ${y + b}).`);
+    const ans = kind === 'x-axis' ? `(${x}, ${-y})` : `(${-x}, ${y})`;
+    return MQ(`Point (${x}, ${y}) is reflected over the ${kind}. What are the new coordinates?`, ans, [kind === 'x-axis' ? `(${-x}, ${y})` : `(${x}, ${-y})`, `(${-x}, ${-y})`, `(${y}, ${x})`],
+      `Reflecting over the ${kind} flips the ${kind === 'x-axis' ? 'y' : 'x'}-coordinate's sign and keeps the other the same: ${ans}. Picture folding the graph along the ${kind}.`); },
+  () => { const a = R(25, 100), b = R(20, 150 - a), c = 180 - a - b;
+    return MQ(`Two angles of a triangle measure ${a}° and ${b}°. What is the third angle?`, `${c}°`, [`${360 - a - b}°`, `${Math.abs(a - b)}°`, `${c + 10}°`],
+      `The angles in any triangle add up to 180°. 180° − ${a}° − ${b}° = ${c}°.`); },
+  () => { const x = R(-5, 6), m = nz(-4, 4), b = R(-8, 8), y = m * x + b;
+    return MQ(`Solve the system:\ny = ${m}x ${b < 0 ? '−' : '+'} ${Math.abs(b)}\ny = ${y}\nWhat is x?`, x, [y, -x, fmt((y + b) / m)],
+      `Substitute y = ${y} into the first equation: ${y} = ${m}x ${b < 0 ? '−' : '+'} ${Math.abs(b)}. ${b < 0 ? 'Add' : 'Subtract'} ${Math.abs(b)}: ${y - b} = ${m}x. Divide by ${m}: x = ${x}. The solution is the point (${x}, ${y}).`); },
+);
+</script>
+
+<script>
+// ================= LESSONS =================
+// Each topic lists the BANK item indices it covers (for that grade + subject), so practice and weak-spot tracking
+// can pull the right questions. ex = [worked example problem, worked solution].
+const LESSONS = { 7: {}, 8: {} };
+LESSONS[7].Math = [
+  { id: 'integers', name: 'Integers & fractions', items: [0, 1, 20],
+    intro: 'Integers are whole numbers and their opposites (… −2, −1, 0, 1, 2 …). Most mistakes here come from signs, so slow down on the negatives.',
+    points: ['Adding SAME signs: add and keep the sign. (−4) + (−3) = −7', 'Adding DIFFERENT signs: subtract the absolute values and keep the sign of the bigger one. (−9) + 4 = −5', 'Subtracting a number is adding its opposite: 5 − (−2) = 5 + 2 = 7', 'Multiplying or dividing: same signs → positive, different signs → negative.', 'Adding fractions: get a common denominator first, add the numerators, keep the denominator, then simplify.'],
+    ex: ['(−8) + 5 − (−6)', '(−8) + 5 = −3 (different signs: 8 − 5 = 3, and the bigger number was negative). Then −3 − (−6) = −3 + 6 = 3.'] },
+  { id: 'expressions', name: 'Expressions & order of operations', items: [7, 10, 17],
+    intro: 'An expression is a math phrase with numbers, variables, and operations but no equals sign. You simplify or evaluate it.',
+    points: ['Order of operations (PEMDAS): Parentheses, Exponents, Multiply/Divide left to right, Add/Subtract left to right.', 'Like terms have the same variable part: 3x and 5x are like terms; 3x and 5 are not.', 'Combine like terms by adding their coefficients: 4x + 2x = 6x.', 'To evaluate, substitute each value in parentheses: if a = −2, then 3a = 3(−2) = −6.'],
+    ex: ['Simplify 2x + 7 + 5x − 3', 'Group the x-terms: 2x + 5x = 7x. Group the numbers: 7 − 3 = 4. Answer: 7x + 4.'] },
+  { id: 'equations', name: 'Equations & inequalities', items: [2, 11],
+    intro: 'Solving means finding the value that makes the equation true. Think of it as a balance scale — keep both sides equal.',
+    points: ['Goal: get x alone. Whatever you do to one side, do to the other.', 'Undo operations in reverse order: undo adding/subtracting first, then multiplying/dividing.', 'Check your answer by plugging it back into the original equation.', 'Inequalities (<, >, ≤, ≥) solve the same way — but FLIP the sign if you multiply or divide by a negative.'],
+    ex: ['Solve 4x − 7 = 21', 'Add 7 to both sides: 4x = 28. Divide both sides by 4: x = 7. Check: 4(7) − 7 = 28 − 7 = 21 ✓'] },
+  { id: 'ratios', name: 'Ratios, rates & proportions', items: [5, 9, 19],
+    intro: 'Ratios compare two amounts. Rates compare amounts with different units, like dollars per item or miles per hour.',
+    points: ['A ratio can be written 3 to 4, 3:4, or 3/4.', 'A unit rate is the amount for ONE: $12 for 4 → $3 each.', 'A proportion says two ratios are equal. Solve by scaling up/down or by cross-multiplying.', 'Map scales are proportions: multiply the map distance by the scale.'],
+    ex: ['6 apples cost $4.50. How much do 10 apples cost?', 'Unit rate: $4.50 ÷ 6 = $0.75 per apple. Then 10 × $0.75 = $7.50.'] },
+  { id: 'percents', name: 'Percents', items: [3, 4, 14, 15],
+    intro: 'Percent means "per hundred." Percents show up in discounts, tips, taxes, interest, and grades.',
+    points: ['Convert to a decimal by dividing by 100: 35% = 0.35.', '"Of" means multiply: 20% of 80 = 0.20 × 80 = 16.', 'Discount: find the percent of the price and subtract it — or multiply by (100% − discount).', 'Simple interest: I = P × r × t (principal × rate as a decimal × years).', 'Percent change = amount of change ÷ ORIGINAL amount × 100.'],
+    ex: ['A $40 game is 15% off. What is the sale price?', '15% of $40 = 0.15 × 40 = $6. Sale price = $40 − $6 = $34. (Shortcut: 0.85 × 40 = $34.)'] },
+  { id: 'geometry', name: 'Circles, angles & volume', items: [6, 12, 16, 18],
+    intro: 'Geometry formulas are tools — the key is knowing which one the question is asking for.',
+    points: ['Circumference (distance around): C = πd or C = 2πr.', 'Area of a circle (space inside): A = πr² — square the radius FIRST.', 'Volume of a rectangular box = length × width × height, in cubic units (cm³).', 'Complementary angles add to 90°. Supplementary angles add to 180°.'],
+    ex: ['A circle has radius 4. Find its area and circumference. (π ≈ 3.14)', 'Area = 3.14 × 4² = 3.14 × 16 = 50.24 square units. Circumference = 2 × 3.14 × 4 = 25.12 units.'] },
+  { id: 'stats', name: 'Probability & statistics', items: [8, 13],
+    intro: 'Probability measures how likely something is. Statistics describe a set of data with a few key numbers.',
+    points: ['Probability = favorable outcomes ÷ total outcomes. It goes from 0 (impossible) to 1 (certain).', 'Mean (average) = sum of the values ÷ how many values.', 'Median = the middle value once the data is in order.', 'Mode = the most common value. Range = highest − lowest.'],
+    ex: ['Data: 4, 8, 6, 10, 7. Find the mean, median, and range.', 'Mean: (4 + 8 + 6 + 10 + 7) ÷ 5 = 35 ÷ 5 = 7. In order: 4, 6, 7, 8, 10 → median = 7. Range: 10 − 4 = 6.'] },
+];
+LESSONS[7].English = [
+  { id: 'grammar', name: 'Parts of speech', items: [2, 10, 14],
+    intro: 'Every word in a sentence has a job. Knowing the jobs helps you write clearly and fix mistakes.',
+    points: ['Noun: a person, place, thing, or idea (dog, city, freedom).', 'Verb: an action or state of being (run, is, seemed).', 'Adjective: describes a noun — what kind? how many? (red, tall, three).', 'Adverb: describes a verb, adjective, or another adverb — how? when? where? (quickly, very, later).', 'Preposition: shows position or relationship (under, across, with). The subject is who or what does the action.'],
+    ex: ['"The tired runner slowly crossed the line."', '"runner" = noun and subject, "tired" = adjective, "crossed" = verb, "slowly" = adverb, "line" = noun.'] },
+  { id: 'sentences', name: 'Sentences & punctuation', items: [4, 6, 22],
+    intro: 'Good sentences are complete and correctly joined. Most punctuation errors are fragments, run-ons, or misplaced commas.',
+    points: ['A complete sentence needs a subject, a verb, and a complete thought.', 'A fragment is missing one of those: "Because it rained."', 'Join two complete sentences with a comma + a conjunction (for, and, nor, but, or, yet, so).', 'Sentence types: declarative (statement .), interrogative (question ?), imperative (command), exclamatory (strong feeling !).'],
+    ex: ['Fix this: "I studied hard I passed the test."', "It's a run-on — two sentences jammed together. Fix: \"I studied hard, so I passed the test.\" or \"I studied hard. I passed the test.\""] },
+  { id: 'usage', name: 'Confusing words & verb tenses', items: [0, 12, 15, 21],
+    intro: 'Spell-check will not catch these because they are real words — just the wrong ones.',
+    points: ["their (belongs to them) · there (a place) · they're (they are)", "your (belongs to you) · you're (you are) · its (belongs to it) · it's (it is)", 'to (direction / before a verb) · too (also or excessive) · two (the number 2)', 'Irregular verbs don\'t take -ed: go → went, swim → swam, bring → brought, catch → caught.'],
+    ex: ['Fix: "Its time to put you\'re shoes over their."', '"It\'s time to put your shoes over there." — it\'s = it is, your = belongs to you, there = a place.'] },
+  { id: 'vocab', name: 'Vocabulary & word parts', items: [5, 9, 16, 17, 18, 19],
+    intro: 'You can figure out a lot of new words by breaking them into parts and using the words around them.',
+    points: ['Synonyms mean the same (big / large). Antonyms mean the opposite (big / small).', 'Prefixes go at the front: un- (not), re- (again), pre- (before), mis- (wrongly), sub- (under).', 'Suffixes go at the end: -less (without), -ful (full of), -er (one who), -able (able to be).', 'Context clues: read the sentence around an unknown word to guess its meaning.'],
+    ex: ['What does "unbreakable" mean?', 'un- (not) + break + -able (able to be) → "not able to be broken."'] },
+  { id: 'figurative', name: 'Figurative language', items: [3, 20],
+    intro: "Figurative language means more than the words literally say. Authors use it to create pictures and feelings.",
+    points: ['Simile: compares using like or as ("fast as lightning").', 'Metaphor: says one thing IS another ("the room was an oven").', 'Personification: gives human traits to non-human things ("the wind howled").', 'Hyperbole: huge exaggeration. Onomatopoeia: sound words (buzz, crash). Alliteration: repeated starting sounds.'],
+    ex: ['"My backpack is a ton of bricks."', 'It says the backpack IS bricks (metaphor) and wildly exaggerates the weight (hyperbole). No "like" or "as," so it is not a simile.'] },
+  { id: 'reading', name: 'Story elements & point of view', items: [1, 7, 11],
+    intro: 'Stories are built from the same parts. Spotting them helps you answer almost any reading question.',
+    points: ['Plot: exposition → rising action → climax (turning point) → falling action → resolution.', 'Theme is the life lesson — write it as a full sentence ("Friendship takes effort").', 'First person uses I/me (narrator is in the story). Third person uses he/she/they.', 'Setting = when and where. Conflict = the main problem.'],
+    ex: ['A girl lies about breaking a vase, feels guilty for days, then confesses and feels relieved.', 'Conflict: her guilt. Climax: the moment she decides to confess. Theme: "Honesty brings peace, even when it is hard."'] },
+  { id: 'writing', name: 'Argument & evidence', items: [8, 13],
+    intro: 'Argument writing takes a side and proves it. The strength of your argument depends on your evidence.',
+    points: ['Claim = your position. Reasons = why. Evidence = proof.', 'Strong evidence: facts, statistics, and quotes from reliable, expert sources.', 'Persuasive writing convinces; informational writing explains; narrative writing tells a story.', 'Always explain HOW your evidence supports your claim — don\'t just drop a quote.'],
+    ex: ['Claim: "Schools should start later."', 'Evidence: pediatric doctors recommend middle schools start at 8:30 a.m. or later. Explanation: more sleep helps students focus, so a later start would improve learning.'] },
+];
+</script>
+
+<script>
+LESSONS[7].Science = [
+  { id: 'cells', name: 'Cells & organization', items: [0, 1, 3, 14, 24],
+    intro: 'All living things are made of cells. Inside each cell, organelles do specific jobs — like tiny organs.',
+    points: ['Nucleus: control center, holds DNA. Mitochondria: release energy from food.', 'Cell membrane: controls what goes in and out. Cytoplasm: jelly that fills the cell. Ribosomes: make proteins.', 'Plant cells ALSO have a cell wall (support), chloroplasts (photosynthesis), and a large vacuole (water storage).', 'Levels of organization: cell → tissue → organ → organ system → organism.'],
+    ex: ['A cell has a cell wall and chloroplasts. What kind of cell is it, and why?', 'A plant cell. Animal cells never have cell walls or chloroplasts — those are for structure and making food from sunlight.'] },
+  { id: 'ecosystems', name: 'Ecosystems & food webs', items: [2, 4, 11, 15, 17],
+    intro: 'An ecosystem is all the living and non-living things in an area interacting. Energy flows from the Sun through food chains.',
+    points: ['Biotic = living (plants, animals, fungi, bacteria). Abiotic = non-living (sunlight, water, air, rocks, temperature).', 'Producers make their own food by photosynthesis: carbon dioxide + water + sunlight → glucose + oxygen.', 'Consumers eat other organisms: herbivores eat plants, carnivores eat animals, omnivores eat both.', 'Decomposers (fungi, bacteria) break down dead things and return nutrients to the soil.'],
+    ex: ['Food chain: grass → rabbit → fox. Label each role.', 'Grass = producer. Rabbit = herbivore (primary consumer). Fox = carnivore (secondary consumer). Arrows point in the direction energy flows.'] },
+  { id: 'genetics', name: 'Genetics & heredity', items: [6, 18],
+    intro: 'Traits are passed from parents to offspring through genes. Each parent gives one allele for a trait.',
+    points: ['Dominant alleles (capital letter, B) hide recessive alleles (lowercase, b).', 'Genotype = the letters (BB, Bb, bb). Phenotype = the trait you can see.', 'A recessive trait shows ONLY with two recessive alleles (bb).', 'Punnett square: put one parent\'s alleles on top, the other\'s on the side, and fill in the 4 boxes. Each box = 25%.'],
+    ex: ['Cross Bb × Bb (B = brown fur, b = white fur). What percent will have white fur?', 'Boxes: BB, Bb, Bb, bb. Only bb is white → 1 of 4 boxes = 25%.'] },
+  { id: 'matter', name: 'Matter & its changes', items: [5, 7, 16, 21, 23],
+    intro: 'Matter is anything with mass that takes up space. It is made of atoms and can change physically or chemically.',
+    points: ['Atom = smallest unit of an element. Molecule = atoms bonded together. Element symbols: O = oxygen, Na = sodium, Fe = iron, Au = gold.', 'Physical change: same substance, new form (melting, cutting, dissolving).', 'Chemical change: a NEW substance forms (burning, rusting, cooking). Signs: gas, color change, heat/light, new smell.', 'Phase changes: melting (s→l), freezing (l→s), evaporation (l→g), condensation (g→l), sublimation (s→g).'],
+    ex: ['Is toasting bread a physical or chemical change?', 'Chemical — the bread turns brown, smells different, and you cannot turn toast back into bread. A new substance formed.'] },
+  { id: 'body', name: 'Human body systems', items: [12, 19],
+    intro: 'Your body systems each have a main job, but they constantly work together to keep you alive.',
+    points: ['Circulatory (heart, blood): delivers oxygen and nutrients. Respiratory (lungs): brings in oxygen, removes CO₂.', 'Digestive: breaks food into nutrients. Excretory (kidneys): filters waste from blood.', 'Nervous (brain, nerves): sends signals. Endocrine: makes hormones.', 'Skeletal: support and protection. Muscular: movement. Immune: fights disease.'],
+    ex: ['Which systems work together when you run?', 'Muscular + skeletal move you; respiratory brings in more oxygen; circulatory pumps it to muscles faster; nervous controls it all.'] },
+  { id: 'earth', name: 'Earth & space', items: [8, 13, 20],
+    intro: 'Earth has layers inside, rocks that change over time, and a tilted axis that gives us seasons.',
+    points: ['Layers: crust (surface) → mantle (hot flowing rock) → outer core (liquid metal) → inner core (solid metal).', 'Igneous rock = cooled magma/lava. Sedimentary = pressed layers (has fossils). Metamorphic = changed by heat and pressure.', 'Seasons are caused by Earth\'s 23.5° tilt — NOT by distance from the Sun.', 'When your hemisphere tilts toward the Sun, sunlight is more direct and days are longer → summer.'],
+    ex: ['Why is it summer in Australia when it is winter in the U.S.?', 'They are in opposite hemispheres. When the Northern Hemisphere tilts away from the Sun (winter), the Southern Hemisphere tilts toward it (summer).'] },
+  { id: 'method', name: 'Scientific method', items: [9, 10, 22],
+    intro: 'Scientists answer questions with fair tests. A good experiment changes only one thing at a time.',
+    points: ['Steps: question → hypothesis → experiment → collect data → conclusion.', 'Hypothesis: a testable prediction, often "If ___, then ___."', 'Independent variable = what you CHANGE. Dependent variable = what you MEASURE.', 'Controlled variables stay the same so the test is fair.'],
+    ex: ['You test whether the amount of water affects how tall plants grow.', 'Independent: amount of water. Dependent: plant height. Controls: same plant type, pot size, soil, and sunlight.'] },
+];
+LESSONS[7]['Social Studies'] = [
+  { id: 'government', name: 'U.S. government & civics', items: [0, 1, 9, 17, 22],
+    intro: 'The U.S. Constitution splits power among three branches so no one person or group can take control.',
+    points: ['Legislative (Congress = Senate + House): MAKES laws.', 'Executive (President): ENFORCES laws, commands the military, can veto bills.', 'Judicial (Supreme Court and federal courts): INTERPRETS laws and decides if they are constitutional.', 'Checks and balances let each branch limit the others. Citizens have rights (speech, fair trial) and responsibilities (obey laws, pay taxes, jury duty).'],
+    ex: ['Congress passes a law, the President vetoes it, and Congress overrides the veto. What is this?', 'Checks and balances: the executive checked the legislature (veto), and the legislature checked back (override with a two-thirds vote).'] },
+  { id: 'history', name: 'Ancient & medieval world', items: [2, 5, 6, 7, 8, 10, 13, 16, 20, 21],
+    intro: 'Early civilizations grew along rivers, then built empires, religions, trade networks, and ideas we still use.',
+    points: ['River valleys: Egypt (Nile), Mesopotamia (Tigris & Euphrates — cuneiform, Hammurabi\'s Code), India (Indus), China (Yellow River).', 'Greece: democracy in Athens, Olympics. Rome: republic, Senate, roads, aqueducts.', 'Middle Ages: feudalism (land for loyalty), Magna Carta (1215) limited the king. The Silk Road linked China and Europe through trade.', 'Primary sources were made at the time (diaries, photos); secondary sources interpret later (textbooks). BCE years count down toward year 1.'],
+    ex: ['Which is older: 1754 BCE or 509 BCE?', '1754 BCE. BCE years count DOWN toward year 1, so the bigger BCE number is further in the past. Hammurabi\'s Code (1754 BCE) came before the Roman Republic (509 BCE).'] },
+  { id: 'geography', name: 'World geography & maps', items: [3, 11, 14, 15, 18, 23],
+    intro: 'Geography is about where things are and why. Maps use a grid of latitude and longitude to pinpoint any place.',
+    points: ['Latitude lines run east–west and measure north/south of the Equator ("lat is flat").', 'Longitude lines run pole to pole and measure east/west of the Prime Meridian.', '7 continents: North America, South America, Europe, Africa, Asia, Australia/Oceania, Antarctica.', 'Landforms: peninsula (water on 3 sides), isthmus (thin land bridge), archipelago (island chain), delta (river mouth), plateau (raised flat land).'],
+    ex: ['Where is 35°S, 150°E?', 'S = south of the Equator (Southern Hemisphere). E = east of the Prime Meridian (Eastern Hemisphere). That is southeastern Australia, near Sydney.'] },
+  { id: 'economics', name: 'Economics', items: [4, 12, 19],
+    intro: 'Economics studies how people make choices with limited resources.',
+    points: ['Scarcity: limited resources, unlimited wants — so we must choose.', 'Opportunity cost: the next-best thing you give up when you choose.', 'Supply and demand: high demand or low supply → prices rise; low demand or high supply → prices fall.', 'Imports are bought from other countries; exports are sold to them. Taxes pay for public services.'],
+    ex: ['A new game console launches and only a few are made. What happens to the price, and why?', 'The price goes up (or resellers charge more). Demand is high but supply is low, so buyers compete for the few available.'] },
+];
+</script>
+
+<script>
+LESSONS[8].Math = [
+  { id: 'exponents', name: 'Exponents & scientific notation', items: [0, 4, 10, 11, 12],
+    intro: 'An exponent tells how many times to multiply a base by itself: 2⁴ = 2 × 2 × 2 × 2 = 16. Exponent rules are shortcuts.',
+    points: ['Multiplying same bases: ADD exponents. 3² × 3⁵ = 3⁷', 'Power of a power: MULTIPLY exponents. (3²)⁵ = 3¹⁰', 'Zero exponent: any nonzero number⁰ = 1. Negative exponent: flip it. 2⁻³ = 1/2³ = 1/8', 'Scientific notation: a number from 1 to 10 times a power of 10. 45,000 = 4.5 × 10⁴', 'Multiplying in scientific notation: multiply the front numbers, add the exponents.'],
+    ex: ['Simplify (2 × 10³) × (4 × 10⁵)', 'Front numbers: 2 × 4 = 8. Powers of ten: 10³ × 10⁵ = 10⁸. Answer: 8 × 10⁸.'] },
+  { id: 'roots', name: 'Square roots & irrational numbers', items: [8, 18, 19],
+    intro: 'A square root undoes squaring: √49 = 7 because 7² = 49. Some roots are whole numbers; many are not.',
+    points: ['Memorize perfect squares: 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144.', 'Rational numbers can be written as fractions: integers, terminating decimals, repeating decimals, √(perfect square).', 'Irrational numbers never end and never repeat: π, √2, √15.', 'Estimate a root by finding the perfect squares on either side of it.'],
+    ex: ['Estimate √40.', '36 < 40 < 49, so 6 < √40 < 7. Since 40 is closer to 36, √40 is a little more than 6 (about 6.3).'] },
+  { id: 'linear', name: 'Slope & linear functions', items: [1, 5, 9, 13],
+    intro: 'A linear function makes a straight line. Its slope tells how steep it is; its y-intercept tells where it starts.',
+    points: ['Slope = rise ÷ run = (y₂ − y₁) ÷ (x₂ − x₁).', 'Positive slope goes up to the right; negative slope goes down.', 'Slope-intercept form: y = mx + b, where m = slope and b = y-intercept.', 'Evaluating f(x): replace x with the number. If f(x) = 2x + 1, then f(3) = 2(3) + 1 = 7.', 'In a table, slope = how much y changes each time x goes up by 1.'],
+    ex: ['Find the slope through (1, 2) and (4, 11).', '(11 − 2) ÷ (4 − 1) = 9 ÷ 3 = 3. For every 1 step right, the line goes up 3.'] },
+  { id: 'equations', name: 'Multi-step equations & systems', items: [3, 6, 14, 22],
+    intro: 'Harder equations have variables on both sides or parentheses. A system is two equations that share a solution.',
+    points: ['Distribute first if there are parentheses: 3(x + 2) = 3x + 6.', 'Move variable terms to one side by adding/subtracting them from both sides.', 'Then undo adding/subtracting, then multiplying/dividing.', 'Systems: the solution is the point where both lines meet. Solve by substitution or by adding equations to cancel a variable.'],
+    ex: ['Solve 5x + 3 = 2x + 18', 'Subtract 2x: 3x + 3 = 18. Subtract 3: 3x = 15. Divide by 3: x = 5. Check: 5(5) + 3 = 28 and 2(5) + 18 = 28 ✓'] },
+  { id: 'pythagorean', name: 'Pythagorean theorem', items: [2, 16, 17],
+    intro: 'In any right triangle, the two legs and the hypotenuse (the longest side, across from the right angle) are connected.',
+    points: ['a² + b² = c², where c is the hypotenuse.', 'Finding the hypotenuse: add the squares, then take the square root.', 'Finding a leg: SUBTRACT the squares (c² − a²), then take the square root.', 'Distance between two points: draw a right triangle and use the theorem. Common triples: 3-4-5, 5-12-13, 8-15-17.'],
+    ex: ['A 10-foot ladder reaches 8 feet up a wall. How far is its base from the wall?', 'The ladder is the hypotenuse. b² = 10² − 8² = 100 − 64 = 36, so b = √36 = 6 feet.'] },
+  { id: 'volume', name: 'Volume of cylinders & cones', items: [7, 15],
+    intro: 'Volume is the space inside a 3-D shape. Round shapes start from the area of a circle.',
+    points: ['Cylinder: V = πr²h (area of the base circle × height).', 'Cone: V = (1/3)πr²h — one-third of the matching cylinder.', 'Sphere: V = (4/3)πr³.', 'If you are given the diameter, divide by 2 to get the radius first. Answers use cubic units.'],
+    ex: ['A can has radius 3 cm and height 10 cm. Find its volume. (π ≈ 3.14)', 'V = 3.14 × 3² × 10 = 3.14 × 9 × 10 = 282.6 cm³.'] },
+  { id: 'transformations', name: 'Transformations & angles', items: [20, 21],
+    intro: 'Transformations move shapes on a coordinate plane. Angle facts let you find missing measurements.',
+    points: ['Translation (slide): add to x for right, subtract for left; add to y for up, subtract for down.', 'Reflection over the x-axis: (x, y) → (x, −y). Over the y-axis: (x, y) → (−x, y).', 'Rotation 180° about the origin: (x, y) → (−x, −y).', 'The angles inside a triangle always add to 180°.'],
+    ex: ['Reflect (3, −5) over the y-axis, then translate it up 2.', 'Reflect over y-axis: (−3, −5). Up 2: (−3, −3).'] },
+];
+LESSONS[8].English = [
+  { id: 'voice', name: 'Active/passive voice & verb moods', items: [0, 4, 16],
+    intro: 'Voice shows who is doing the action. Mood shows the attitude of a sentence — a fact, a command, or a wish.',
+    points: ['Active voice: the subject does the action. "The dog chased the cat."', 'Passive voice: the subject receives the action, often "was ___ by." "The cat was chased by the dog."', 'Use active voice for clear, strong writing; passive is useful when the doer is unknown.', 'Moods: indicative (facts), imperative (commands), interrogative (questions), subjunctive (wishes/hypotheticals: "If I were…").'],
+    ex: ['Rewrite in active voice: "The winning goal was scored by Maya."', '"Maya scored the winning goal." The doer (Maya) moves to the front as the subject.'] },
+  { id: 'verbals', name: 'Verbals', items: [1, 11, 15],
+    intro: 'Verbals look like verbs but act like other parts of speech.',
+    points: ['Gerund: -ing verb used as a NOUN. "Swimming is fun."', 'Participle: verb form used as an ADJECTIVE. "the barking dog," "a broken window."', 'Infinitive: "to" + verb, used as a noun, adjective, or adverb. "I want to win."', 'Test: if the -ing word names an activity → gerund; if it describes a noun → participle.'],
+    ex: ['"The crying baby needs sleeping time." Identify the verbals.', '"crying" describes baby → participle. "sleeping" describes time → participle. The main verb is "needs."'] },
+  { id: 'literary', name: 'Literary devices', items: [2, 5, 7, 13, 19],
+    intro: 'Authors use these tools on purpose. Naming them helps you explain HOW a text creates its effect.',
+    points: ['Dramatic irony: the audience knows something a character does not. Situational irony: the opposite of what is expected happens.', 'Foreshadowing: hints about later events. Flashback: a jump back to earlier events.', 'Allusion: a reference to a well-known person, event, or work. Symbol: an object standing for a bigger idea.', 'Tone = the author\'s attitude. Mood = the feeling the reader gets.'],
+    ex: ['In a movie, we see the villain hide in the closet, but the hero walks in calmly. What device is this?', 'Dramatic irony — we know about the danger and the hero does not, which builds suspense.'] },
+  { id: 'mechanics', name: 'Punctuation & spelling', items: [3, 8, 17],
+    intro: 'Small marks and letters change how professional your writing looks.',
+    points: ['Semicolon (;) joins two complete, closely related sentences without "and/but/so."', 'Colon (:) introduces a list or explanation after a complete sentence.', 'Commonly misspelled: separate, definitely, receive, necessary, embarrass, beginning, believe, government.', 'Tricks: "a rat" in sepARATe, "finite" in deFINITEly, "i before e except after c" (receive).'],
+    ex: ['Fix: "I was tired; so I went to bed."', 'A semicolon can\'t come before "so." Use a comma: "I was tired, so I went to bed." Or drop "so": "I was tired; I went to bed."'] },
+  { id: 'agreement', name: 'Agreement & pronoun case', items: [9, 18, 21],
+    intro: 'Subjects and verbs must match in number, and pronouns must be in the right form for their job.',
+    points: ['Singular subject → singular verb (is, has). Plural subject → plural verb (are, have).', 'Ignore phrases between: "The box OF CRAYONS is…" — the subject is box.', 'Each, everyone, neither, one = singular. Both, several, "A and B" = plural.', 'Subject pronouns: I, he, she, we, they. Object pronouns: me, him, her, us, them. Cover the other person to test: "Mom took (my brother and) me."'],
+    ex: ['Choose: "Neither of the answers (is / are) correct."', '"is" — cross out "of the answers." The subject is "Neither," which is singular.'] },
+  { id: 'vocab', name: 'Roots & word choice', items: [10, 14, 20],
+    intro: 'Many English words come from Greek and Latin roots. Word choice also carries feeling (connotation).',
+    points: ['Roots: chron (time), bio (life), geo (earth), graph (write), tele (far), port (carry), dict (say), spect (look).', 'Put roots together: geo + graph = "earth writing" → geography.', 'Denotation = dictionary meaning. Connotation = the feeling a word gives.', 'Similar words differ in connotation: confident (+) vs. arrogant (−); thrifty (+) vs. cheap (−).'],
+    ex: ['What might "chronometer" mean?', 'chron (time) + meter (measure) → a device that measures time, like a very precise clock.'] },
+  { id: 'argument', name: 'Argument & research', items: [6, 12],
+    intro: 'Strong arguments answer the other side and use trustworthy sources.',
+    points: ['Claim: your position. Counterclaim: the opposing view. Rebuttal: why the counterclaim is weaker.', 'Addressing the other side makes your argument MORE convincing, not less.', 'Credible sources: expert authors, recent dates, cited evidence, trustworthy publishers (.gov, .edu, established news).', 'Don\'t trust a source just because it agrees with you or ranks first in a search.'],
+    ex: ['Claim: "Students should have less homework." Write a counterclaim and rebuttal.', 'Counterclaim: "Homework helps students practice." Rebuttal: "Research shows that after about an hour, extra homework adds stress without improving grades."'] },
+];
+</script>
+
+<script>
+LESSONS[8].Science = [
+  { id: 'forces', name: 'Forces & motion', items: [0, 1, 12, 13, 14, 15, 19],
+    intro: "Isaac Newton's three laws explain how forces change motion. Speed and acceleration describe that motion with numbers.",
+    points: ['1st Law (inertia): objects keep doing what they are doing unless a net force acts on them.', '2nd Law: F = m × a. More force → more acceleration; more mass → less acceleration. Force is in newtons (N).', '3rd Law: every action has an equal and opposite reaction (a rocket pushes gas down, gas pushes the rocket up).', 'Speed = distance ÷ time. Gravity is the force that keeps planets in orbit.'],
+    ex: ['A 50 N force pushes a 10 kg box. What is its acceleration?', 'a = F ÷ m = 50 ÷ 10 = 5 m/s².'] },
+  { id: 'atoms', name: 'Atoms & the periodic table', items: [2, 3, 17],
+    intro: 'Atoms are made of protons, neutrons, and electrons. The periodic table organizes elements by their proton count.',
+    points: ['Nucleus (center): protons (+) and neutrons (no charge). Electron cloud: electrons (−).', 'Atomic number = number of protons. It identifies the element.', 'Mass number = protons + neutrons, so neutrons = mass number − atomic number.', 'In a neutral atom, electrons = protons.'],
+    ex: ['Oxygen has atomic number 8 and mass number 16. Find protons, neutrons, and electrons.', 'Protons = 8. Neutrons = 16 − 8 = 8. Electrons = 8 (neutral atom).'] },
+  { id: 'reactions', name: 'Chemical reactions & density', items: [4, 11, 16, 18],
+    intro: 'In a chemical reaction, atoms rearrange into new substances. Density tells how tightly packed matter is.',
+    points: ['Law of Conservation of Mass: mass of reactants = mass of products. Atoms are never created or destroyed.', 'Signs of a chemical reaction: gas bubbles, color change, temperature change, light, a new solid (precipitate).', 'Density = mass ÷ volume (g/cm³).', 'Objects less dense than water (1 g/cm³) float; denser objects sink.'],
+    ex: ['A 30 g object has a volume of 40 cm³. Does it float in water?', 'Density = 30 ÷ 40 = 0.75 g/cm³. That is less than 1, so it floats.'] },
+  { id: 'energy', name: 'Energy, waves & heat', items: [7, 8, 20, 21, 24],
+    intro: 'Energy can be stored or in motion, and it travels as waves and heat.',
+    points: ['Kinetic energy = energy of motion. Potential energy = stored energy (height, stretch, compression).', 'Wave parts: crest, trough, amplitude (height → loudness/brightness), wavelength, frequency (→ pitch).', 'Mechanical waves (sound) need a medium; electromagnetic waves (light, radio) can travel through space.', 'Heat transfer: conduction (touch), convection (moving fluids/air), radiation (waves, like sunlight).'],
+    ex: ['A roller coaster climbs, pauses at the top, then drops. Describe its energy.', 'Climbing: gaining potential energy. At the top: maximum potential energy. Dropping: potential energy turns into kinetic energy.'] },
+  { id: 'life', name: 'Evolution & genetics', items: [5, 10],
+    intro: 'Species change over many generations as helpful traits become more common.',
+    points: ['Natural selection: individuals with traits suited to their environment survive and reproduce more.', 'Those traits get passed on, so the population changes over time (evolution).', 'Mutations are changes in DNA — they can be harmful, helpful, or neutral.', 'Individuals don\'t choose to adapt; populations change across generations.'],
+    ex: ['Why do many insects become resistant to a pesticide after years of use?', 'A few insects had random mutations that made them resistant. They survived and reproduced, so each generation had more resistant insects.'] },
+  { id: 'earthspace', name: 'Earth & space', items: [6, 9, 22, 23],
+    intro: "Earth's surface is split into moving plates, and Earth itself is part of a solar system held together by gravity.",
+    points: ['Plate tectonics: matching fossils, rocks, and coastlines show continents were once joined (Pangaea).', 'Divergent boundaries pull apart; convergent push together (mountains, trenches); transform slide past (earthquakes).', 'Moon phases come from how much of the Moon\'s sunlit half we see as it orbits Earth.', 'Planets from the Sun: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.'],
+    ex: ['Why are there huge mountains where India meets Asia?', 'It\'s a convergent boundary — the Indian plate pushes into the Eurasian plate, crumpling the crust upward into the Himalayas.'] },
+];
+LESSONS[8]['Social Studies'] = [
+  { id: 'founding', name: 'Colonies & the Revolution', items: [0, 4, 10, 15, 21],
+    intro: 'Thirteen British colonies grew frustrated with British rule and fought for independence.',
+    points: ['Colonial regions: New England (fishing, shipbuilding), Middle (wheat, diversity), Southern (plantations, enslaved labor).', 'After the French and Indian War, Britain taxed the colonies (Stamp Act, Tea Act) — "no taxation without representation."', 'Key people: Thomas Paine (Common Sense), Thomas Jefferson (Declaration of Independence), George Washington (Continental Army).', 'Timeline: Boston Tea Party (1773) → Lexington & Concord (1775) → Declaration (1776) → Yorktown (1781).'],
+    ex: ['Why was the Stamp Act so unpopular?', 'Parliament taxed the colonists directly, but the colonists had no elected representatives in Parliament to vote on it.'] },
+  { id: 'constitution', name: 'The Constitution & Bill of Rights', items: [1, 2, 3, 12, 14, 19],
+    intro: 'The first government was too weak, so the founders wrote a new Constitution in 1787 — then added a Bill of Rights.',
+    points: ['Articles of Confederation: Congress couldn\'t tax, raise an army, or regulate trade.', 'Great Compromise: House seats based on population + Senate with 2 per state.', 'Federalists supported the Constitution; Anti-Federalists demanded a Bill of Rights. Federalism = power shared between national and state governments.', 'Amendments: 1st (speech, religion, press), 2nd (bear arms), 4th (searches), 5th (remain silent), 19th (women vote), 22nd (two-term limit).'],
+    ex: ['Why did small states like the Great Compromise?', 'In the Senate, every state gets 2 votes no matter its size — so small states kept equal power there.'] },
+  { id: 'expansion', name: 'Growth & westward expansion', items: [5, 8, 11, 13, 20],
+    intro: 'In the 1800s the U.S. grew rapidly in land, population, and industry — at great cost to Native Americans.',
+    points: ['Louisiana Purchase (1803): bought from France, doubled the country; explored by Lewis and Clark.', 'Manifest Destiny: the belief the U.S. should stretch coast to coast.', 'Indian Removal Act (1830) → Trail of Tears: forced removal of the Cherokee and other nations.', 'Industrial Revolution: factories and machines replaced hand-made goods; cities grew.'],
+    ex: ['How were Manifest Destiny and the Trail of Tears connected?', 'The drive to expand west led the government to force Native nations off their land so settlers could move in.'] },
+  { id: 'civilwar', name: 'Civil War & Reconstruction', items: [6, 7, 9, 18],
+    intro: 'Disagreement over slavery split the nation. After the war, the country tried to rebuild and reunite.',
+    points: ['Main cause: slavery, especially whether it could spread to new territories.', 'Union advantages: population, factories, railroads, navy. Confederate advantages: skilled generals, fighting at home.', 'Emancipation Proclamation (1863) freed enslaved people in rebelling states; the 13th Amendment (1865) ended slavery nationwide.', 'Reconstruction (1865–1877) rebuilt the South and readmitted states; after it ended, Jim Crow laws enforced segregation.'],
+    ex: ['Why did the Union\'s factories matter so much?', 'A long war needs weapons, uniforms, and supplies. The North could produce far more, while its navy blockaded Southern ports.'] },
+  { id: 'timeline', name: 'Key events & terms', items: [16, 17],
+    intro: 'U.S. history makes sense when you connect events in order and see how one caused the next.',
+    points: ['Anchor dates: 1607 Jamestown, 1776 Declaration, 1787 Constitution, 1803 Louisiana Purchase, 1861–1865 Civil War.', 'Veto = President rejects a bill. Judicial review = courts decide if laws are constitutional (Marbury v. Madison, 1803).', 'Secession = leaving the Union. Abolition = ending slavery. Tariff = tax on imports.', 'Missouri Compromise (1820) balanced slave and free states; the Dred Scott decision (1857) inflamed tensions.'],
+    ex: ['Put in order: Civil War begins, Louisiana Purchase, Constitution written.', 'Constitution written (1787) → Louisiana Purchase (1803) → Civil War begins (1861).'] },
+];
+
+// Tag every bank item with its topic id (used by practice mode and weak-spot tracking).
+for (const g in LESSONS) for (const s in LESSONS[g]) for (const t of LESSONS[g][s]) for (const i of t.items) BANK[g][s][i].topic = t.id;
+</script>
+
+<!--BANKS-->
+
+<script>
+// ---------- sound: synthesized with Web Audio, so there are no files to load ----------
+const Sound = (() => {
+  let ctx = null, muted = false;
+  try { muted = localStorage.getItem('gradecheck.muted') === '1'; } catch {}
+  const ac = () => {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  };
+  // A pitched blip with a fast attack and exponential decay; `slide` bends the pitch for a "pop".
+  function tone(freq, { at = 0, dur = 0.08, type = 'sine', vol = 0.15, slide = 1 } = {}){
+    const c = ac(), t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide !== 1) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  // A tiny burst of filtered noise — the crisp transient that makes a click feel physical.
+  function snap(vol = 0.08, cutoff = 2500){
+    const c = ac(), len = Math.floor(c.sampleRate * 0.018), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 4;
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = buf; f.type = 'highpass'; f.frequency.value = cutoff; g.gain.value = vol;
+    s.connect(f).connect(g).connect(c.destination);
+    s.start();
+  }
+  const play = fn => { if (!muted) try { fn(); } catch {} };
+  return {
+    get muted(){ return muted; },
+    setMuted(m){ muted = m; try { localStorage.setItem('gradecheck.muted', m ? '1' : '0'); } catch {} },
+    button:    () => play(() => { snap(0.05, 3000); tone(480, { dur: 0.05, vol: 0.08, slide: 0.75 }); }),
+    answer:    () => play(() => { snap(0.09); tone(660, { dur: 0.1, vol: 0.14, slide: 0.5 }); tone(1320, { dur: 0.04, vol: 0.03, slide: 0.6 }); }),
+    right:     () => play(() => { snap(0.06); tone(784, { dur: 0.12, vol: 0.09, type: 'triangle' }); tone(1175, { at: 0.07, dur: 0.24, vol: 0.08, type: 'triangle' }); }),
+    wrong:     () => play(() => { snap(0.07, 1200); tone(233, { dur: 0.22, vol: 0.11, type: 'triangle', slide: 0.8 }); }),
+    milestone: () => play(() => { tone(880, { dur: 0.18, vol: 0.07, type: 'triangle' }); tone(1175, { at: 0.08, dur: 0.3, vol: 0.06, type: 'triangle' }); }),
+    pass:      () => play(() => { [523, 659, 784, 1047].forEach((f, i) => tone(f, { at: i * 0.1, dur: 0.32, vol: 0.11, type: 'triangle' })); tone(1568, { at: 0.42, dur: 0.7, vol: 0.05 }); }),
+    fail:      () => play(() => { tone(392, { dur: 0.22, vol: 0.1, type: 'triangle' }); tone(330, { at: 0.18, dur: 0.45, vol: 0.1, type: 'triangle', slide: 0.94 }); }),
+  };
+})();
+
+const muteBtn = document.getElementById('mute');
+const drawMute = () => { muteBtn.textContent = Sound.muted ? '🔇' : '🔊'; };
+muteBtn.onclick = () => { Sound.setMuted(!Sound.muted); drawMute(); Sound.button(); };
+drawMute();
+// Every ordinary button clicks on press (answers and the mute toggle have their own sounds).
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest('button');
+  if (b && !b.disabled && !b.dataset.k && b !== muteBtn) Sound.button();
+});
+
+// ---------- engine ----------
+const SUBJECTS = ['Math', 'English', 'Science', 'Social Studies'];
+const PER_SUBJECT = 25, TEST_LEN = PER_SUBJECT * SUBJECTS.length, PASS = 80, MAX_MISSES = TEST_LEN - PASS;
+const MAX_FIXED = 8;   // at most this many hand-written questions per subject; the rest are generated fresh
+const GRADES = Object.keys(BANK).map(Number).sort((a, b) => a - b);
+const ord = g => g + (g === 1 ? 'st' : g === 2 ? 'nd' : g === 3 ? 'rd' : 'th');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const app = document.getElementById('app');
+
+const KEY = 'gradecheck.v1';
+// topics: "grade|subject|topicId" → { miss: test misses, right / tries: practice results }
+const fresh = () => ({ certified: [], best: {}, seen: [], current: null, topics: {} });
+function load(){ try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return fresh(); } }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch {} }
+let progress = load();
+const unlocked = g => g === GRADES[0] || progress.certified.includes(GRADES[GRADES.indexOf(g) - 1]);
+
+// Every question you've been asked (oldest first), so new tests avoid repeats.
+// A question is identified by its wording + answer, since one template can ask about many different answers.
+const RECENT = 3 * TEST_LEN;
+function markSeen(qs){
+  const keys = qs.map(q => q.key);
+  progress.seen = [...progress.seen.filter(k => !keys.includes(k)), ...keys].slice(-4000);
+}
+
+function buildTest(grade){
+  const ever = new Set(progress.seen), recent = new Set(progress.seen.slice(-RECENT)), used = new Set(), qs = [];
+  // freshness: 0 = never seen, 1 = seen but not in the last few tests, 2 = seen recently
+  const age = k => !ever.has(k) ? 0 : !recent.has(k) ? 1 : 2;
+  const add = (subject, q) => { used.add(q.key); qs.push({ subject, ...q }); };
+  for (const subj of SUBJECTS){
+    const items = BANK[grade][subj];
+    const gens = shuffle(items.filter(x => typeof x === 'function'));
+    const fixed = shuffle(items.filter(x => typeof x !== 'function')).map(f => ({ f, key: f[0] + '|' + f[1] }))
+      .sort((a, b) => age(a.key) - age(b.key));
+    const fixedQ = ({ f, key }) => ({ ...MQ(f[0], f[1], shuffle(f[2]), f[3]), key, topic: f.topic });
+    let n = 0;
+    // A few hand-written questions (freshest first)...
+    for (const f of fixed.slice(0, gens.length ? MAX_FIXED : PER_SUBJECT)) if (age(f.key) === 0 || !gens.length){ add(subj, fixedQ(f)); n++; }
+    // ...then generated questions, round-robin across generators. Accept never-seen first, then not-recent, then anything new to this test.
+    for (let g = 0, tries = 0; n < PER_SUBJECT && gens.length && tries < 900; g++, tries++){
+      const gen = gens[g % gens.length], q = gen();
+      q.key = q.q + '|' + q.answer; q.topic = gen.topic;
+      if (used.has(q.key) || age(q.key) > (tries < 300 ? 0 : tries < 600 ? 1 : 2)) continue;
+      add(subj, q); n++;
+    }
+    for (const f of fixed){ if (n >= PER_SUBJECT) break; if (!used.has(f.key)){ add(subj, fixedQ(f)); n++; } }
+  }
+  return shuffle(qs);
+}
+
+let test = null, prac = null, practiceGrade = GRADES[0];
+
+const findTopic = (g, s, id) => LESSONS[g][s].find(t => t.id === id);
+const topicKey = (g, s, id) => `${g}|${s}|${id}`;
+const tstat = k => progress.topics[k] || (progress.topics[k] = { miss: 0, right: 0, tries: 0 });
+// A topic is a weak spot while its test misses outweigh practice (every 2 correct practice answers cancel 1 miss).
+function weakSpots(){
+  return Object.entries(progress.topics)
+    .map(([k, st]) => { const [g, s, id] = k.split('|'); return { g: +g, s, id, st, score: st.miss - st.right / 2 }; })
+    .filter(w => w.score > 0 && LESSONS[w.g]?.[w.s] && findTopic(w.g, w.s, w.id))
+    .sort((a, b) => b.score - a.score);
+}
+const resumeCard = () => progress.current ? `<div class="card grade ready"><div class="num">▶</div>
+    <div class="info"><h3>Test in progress</h3><small>${ord(progress.current.grade)} grade · question ${progress.current.i + 1} of ${TEST_LEN} · ${progress.current.misses.length} missed</small></div>
+    <button class="primary" id="resume">Resume</button></div>` : '';
+function bindCommon(back){
+  const r = document.getElementById('resume');
+  if (r) r.onclick = () => { test = progress.current; showQuestion(); };
+  const b = document.getElementById('back');
+  if (b) b.onclick = back;
+  window.scrollTo(0, 0);
+}
+
+function home(){
+  test = null; prac = null;
+  const top = GRADES.filter(g => progress.certified.includes(g)).pop(), weak = weakSpots().length;
+  app.innerHTML = `
+    <header class="board">
+      <h1>Grade Check</h1>
+      <p>${top ? `You're certified through <b>${ord(top)} grade</b>.` : `Prove what you know, one grade at a time.`}</p>
+    </header>
+    ${resumeCard()}
+    <div class="modes">
+      <button class="mode" id="go-test"><div class="icon">📝</div><h2>Take a Test</h2>
+        <p>${TEST_LEN} random questions across ${SUBJECTS.length} subjects. Score ${PASS} to certify a grade and unlock the next one.</p></button>
+      <button class="mode" id="go-practice"><div class="icon">📚</div><h2>Practice &amp; Learn</h2>
+        <p>${weak ? `<b class="warn">${weak} weak spot${weak > 1 ? 's' : ''} to review.</b> ` : ''}Pick any topic, read a quick lesson, and practice with instant feedback.</p></button>
+    </div>`;
+  document.getElementById('go-test').onclick = testHome;
+  document.getElementById('go-practice').onclick = () => practiceHome();
+  bindCommon();
+}
+
+function testHome(){
+  test = null; prac = null;
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← Home</button></div>
+    <h1 class="page-title">📝 Tests</h1>
+    <div class="card"><p class="rules">Each test has ${TEST_LEN} random questions — ${PER_SUBJECT} each of ${SUBJECTS.join(', ')}.
+      Get <b>${PASS} right</b> to be certified and unlock the next grade. Miss ${MAX_MISSES + 1} and the test ends —
+      you'll see every mistake with how to fix it, then try a brand-new test.</p></div>
+    ${resumeCard()}
+    <div class="grades">${GRADES.map(g => {
+      const done = progress.certified.includes(g), open = unlocked(g);
+      const cls = done ? 'done' : open ? 'ready' : 'locked';
+      const status = done ? `Certified ✓ · best ${progress.best[g]}/${TEST_LEN}` : open ? 'Ready to test' : `🔒 Pass ${ord(g - 1)} grade to unlock`;
+      return `<div class="card grade ${cls}">
+        <div class="num">${g}</div>
+        <div class="info"><h3>${ord(g)} Grade</h3><small>${status}</small></div>
+        <button class="${open && !done ? 'primary' : ''}" data-start="${g}" ${open ? '' : 'disabled'}>${done ? 'Retake' : 'Start'}</button>
+      </div>`; }).join('')}
+    </div>
+    <p style="text-align:center;margin-top:18px"><button class="link" id="reset">Reset progress</button></p>`;
+  app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => {
+    if (progress.current && !confirm('Starting a new test throws away the one in progress. Continue?')) return;
+    start(+b.dataset.start);
+  });
+  document.getElementById('reset').onclick = () => { if (confirm('Erase all certifications, question history, and practice stats?')){ progress = fresh(); save(); testHome(); } };
+  bindCommon(home);
+}
+
+// ---------- practice & learn ----------
+function topicButton(g, s, t, showWhere){
+  const st = progress.topics[topicKey(g, s, t.id)], weak = st && st.miss - st.right / 2 > 0;
+  const status = [weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ');
+  return `<button class="topic${weak ? ' weak' : ''}" data-topic="${g}|${s}|${t.id}">
+    ${showWhere ? `<small>${ord(g)} grade · ${s}</small>` : ''}<b>${esc(t.name)}</b><small>${status}</small></button>`;
+}
+
+function practiceHome(g = practiceGrade){
+  practiceGrade = g; test = null; prac = null;
+  const weak = weakSpots().slice(0, 6);
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← Home</button></div>
+    <h1 class="page-title">📚 Practice &amp; Learn</h1>
+    <p class="rules">Tap any topic for a quick lesson, then practice as much as you want. Practice never counts against your tests.</p>
+    ${weak.length ? `<h2 class="section">⚠️ Your weak spots</h2>
+      <p class="rules">Topics you've missed on tests. Get practice questions right to clear them.</p>
+      <div class="topics">${weak.map(w => topicButton(w.g, w.s, findTopic(w.g, w.s, w.id), true)).join('')}</div>` : ''}
+    <div class="tabs">${GRADES.map(x => `<button data-grade="${x}" class="${x === g ? 'on' : ''}">${ord(x)} Grade</button>`).join('')}</div>
+    ${SUBJECTS.map(s => `<h2 class="section">${s}</h2>
+      <div class="topics">${LESSONS[g][s].map(t => topicButton(g, s, t)).join('')}</div>`).join('')}`;
+  app.querySelectorAll('[data-grade]').forEach(b => b.onclick = () => practiceHome(+b.dataset.grade));
+  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => { const [tg, ts, id] = b.dataset.topic.split('|'); lesson(+tg, ts, id); });
+  bindCommon(home);
+}
+
+function lesson(g, s, id){
+  prac = null;
+  const t = findTopic(g, s, id);
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← All topics</button></div>
+    <div class="card lesson">
+      <span class="tag">${ord(g)} grade · ${s}</span>
+      <h1>${esc(t.name)}</h1>
+      <p class="intro">${esc(t.intro)}</p>
+      <h3>Key rules</h3>
+      <ul class="points">${t.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+      <h3>Worked example</h3>
+      <div class="example"><div class="prob">${esc(t.ex[0])}</div><div>${esc(t.ex[1])}</div></div>
+      <div class="actions"><button class="primary" id="practice">Practice this topic →</button></div>
+    </div>`;
+  document.getElementById('practice').onclick = () => { prac = { g, s, id, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
+  bindCommon(() => practiceHome(g));
+}
+
+function nextPractice(){
+  const p = prac, t = findTopic(p.g, p.s, p.id), items = BANK[p.g][p.s].filter(x => x.topic === p.id);
+  let q;
+  for (let i = 0; i < 20; i++){   // avoid showing the exact same question twice in a row
+    const it = pick(items);
+    q = typeof it === 'function' ? it() : MQ(it[0], it[1], shuffle(it[2]), it[3]);
+    if (q.q + q.answer !== p.last) break;
+  }
+  p.q = q; p.last = q.q + q.answer; p.answered = false;
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← Lesson</button><span><b>${esc(t.name)}</b></span><span id="pstats"></span></div>
+    <div class="card">
+      <span class="tag">Practice · ${p.s}</span>
+      <div class="q">${esc(q.q)}</div>
+      <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
+      <div id="feedback"></div>
+    </div>`;
+  drawPracticeStats();
+  app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => practiceAnswer(+b.dataset.k));
+  bindCommon(() => lesson(p.g, p.s, p.id));
+}
+const drawPracticeStats = () => { document.getElementById('pstats').textContent = `🔥 Streak ${prac.streak} · ${prac.right}/${prac.total} right`; };
+
+function practiceAnswer(k){
+  const p = prac; if (!p || p.answered) return;
+  p.answered = true;
+  const q = p.q, ok = q.choices[k] === q.answer, st = tstat(topicKey(p.g, p.s, p.id));
+  p.total++; st.tries++;
+  if (ok){ p.right++; p.streak++; st.right++; p.streak % 5 === 0 ? Sound.milestone() : Sound.right(); }
+  else { p.streak = 0; Sound.wrong(); }
+  save();
+  drawPracticeStats();
+  app.querySelectorAll('[data-k]').forEach((b, i) => {
+    b.disabled = true;
+    if (q.choices[i] === q.answer) b.classList.add('correct'); else if (i === k) b.classList.add('wrong');
+  });
+  document.getElementById('feedback').innerHTML = `
+    <div class="ans ${ok ? 'right' : 'yours'}">${ok ? `✓ Correct!${p.streak >= 3 ? ` ${p.streak} in a row 🔥` : ''}` : `✗ Not quite. The answer is: ${esc(q.answer)}`}</div>
+    <div class="fix"><b>${ok ? 'Why:' : 'How to fix it:'}</b> ${esc(q.explain)}</div>
+    <div class="actions"><button class="primary" id="nextq">Next question →</button></div>`;
+  document.getElementById('nextq').onclick = nextPractice;
+}
+
+function start(grade){
+  test = { grade, qs: buildTest(grade), i: 0, right: 0, misses: [], locked: false };
+  progress.current = test; save();
+  showQuestion();
+}
+
+function showQuestion(){
+  const t = test, q = t.qs[t.i];
+  t.locked = false;
+  app.innerHTML = `
+    <div class="topbar"><span><b>${ord(t.grade)} Grade Test</b></span><span>Question ${t.i + 1} of ${TEST_LEN}</span>
+      <span>Misses: ${t.misses.length} / ${MAX_MISSES} allowed</span>
+      <button class="link" id="quit">Save &amp; exit</button></div>
+    <div class="bar"><i style="width:${t.i / TEST_LEN * 100}%"></i></div>
+    <div class="card">
+      <span class="tag">${q.subject}</span>
+      <div class="q">${esc(q.q)}</div>
+      <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
+    </div>`;
+  window.scrollTo(0, 0);
+  app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => answer(+b.dataset.k));
+  document.getElementById('quit').onclick = home;
+}
+
+function answer(k){
+  const t = test; if (!t || t.locked) return;
+  t.locked = true;
+  Sound.answer();
+  const q = t.qs[t.i], chosen = q.choices[k];
+  app.querySelector(`[data-k="${k}"]`).classList.add('picked');
+  app.querySelectorAll('[data-k]').forEach(b => b.disabled = true);
+  if (chosen === q.answer) t.right++;
+  else {
+    t.misses.push({ ...q, chosen });
+    if (q.topic) tstat(topicKey(t.grade, q.subject, q.topic)).miss++;
+  }
+  setTimeout(() => {
+    if (test !== t) return;
+    t.i++;
+    if (t.misses.length > MAX_MISSES || t.i === TEST_LEN) return results();
+    if (t.i % PER_SUBJECT === 0) Sound.milestone();   // a little chime every 25 questions
+    save(); showQuestion();
+  }, 260);
+}
+
+function results(){
+  const t = test, passed = t.misses.length <= MAX_MISSES && t.i === TEST_LEN;
+  const next = GRADES[GRADES.indexOf(t.grade) + 1];
+  if (passed){
+    if (!progress.certified.includes(t.grade)) progress.certified.push(t.grade);
+    progress.best[t.grade] = Math.max(progress.best[t.grade] || 0, t.right);
+  }
+  markSeen(t.qs.slice(0, t.i));
+  progress.current = null;
+  save();
+  passed ? Sound.pass() : Sound.fail();
+  const head = passed
+    ? `<div class="card result-head pass"><div class="big">🎓</div>
+        <h2>${ord(t.grade)} Grade Certified!</h2>
+        <p>You scored <b>${t.right}/${TEST_LEN}</b>. You know everything you need to know in ${ord(t.grade)} grade.</p>
+        <div class="actions">${next
+          ? `<button class="primary" id="next">Start ${ord(next)} Grade →</button>`
+          : `<p><b>You've passed every grade here. Top of the class!</b></p>`}
+          <button id="home">All grades</button></div></div>`
+    : `<div class="card result-head fail"><div class="big">📝</div>
+        <h2>Not ${ord(t.grade)} grade level yet</h2>
+        <p>You missed ${t.misses.length} questions (${t.right} right out of ${t.i} answered), so this test is over.
+          Study the fixes below, then take a new test with different questions.</p>
+        <div class="actions"><button class="primary" id="retry">Take a new randomized test</button><button id="home">All grades</button></div></div>`;
+  const review = t.misses.length ? `
+    <h2 class="section">${passed ? 'Still worth reviewing' : "What you got wrong — and how to fix it"}</h2>
+    ${t.misses.map(m => `<div class="card miss">
+      <span class="tag">${m.subject}</span>
+      <div class="q">${esc(m.q)}</div>
+      <div class="ans yours">✗ Your answer: ${esc(m.chosen)}</div>
+      <div class="ans right">✓ Correct answer: ${esc(m.answer)}</div>
+      <div class="fix"><b>How to fix it:</b> ${esc(m.explain)}</div>
+      ${m.topic ? `<button class="link learn" data-learn="${m.subject}|${m.topic}">📚 Learn this topic: ${esc(findTopic(t.grade, m.subject, m.topic).name)} →</button>` : ''}
+    </div>`).join('')}
+    ${passed ? '' : `<div class="actions"><button class="primary" id="retry2">Take a new randomized test</button></div>`}` : '';
+  app.innerHTML = head + review;
+  window.scrollTo(0, 0);
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('next', () => start(next)); on('home', testHome);
+  on('retry', () => start(t.grade)); on('retry2', () => start(t.grade));
+  app.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => { test = null; const [s, id] = b.dataset.learn.split('|'); lesson(t.grade, s, id); });
+}
+
+document.addEventListener('keydown', e => {
+  if (prac?.q && app.querySelector('[data-k]')){
+    if (prac.answered){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); nextPractice(); } return; }
+    const k = +e.key - 1; if (k >= 0 && k < prac.q.choices.length) practiceAnswer(k);
+    return;
+  }
+  if (!test || test.locked || !app.querySelector('[data-k]')) return;
+  const k = +e.key - 1; if (k >= 0 && k < test.qs[test.i].choices.length) answer(k);
+});
+
+home();
+</script>
+</body>
+</html>
