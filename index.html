@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Grade Check</title>
+<title>GED Prep</title>
 <style>
   /* One dim, low-glare palette in every mode: muted slate, softened text, desaturated accents. */
   :root{
@@ -107,6 +107,12 @@
   button.topic.wide{padding:14px 16px;gap:4px}
   .covers{color:var(--ink);opacity:.8;font-size:.92rem}
   .lesson .covers{margin:0 0 10px;color:var(--muted);opacity:1}
+  .subject-strip{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:18px 0 6px}
+  .subject-strip span{font-size:.85rem;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:4px 12px}
+  .subject-strip span.done{color:var(--good);border-color:var(--good);background:var(--good-bg)}
+  .passage{font-size:1rem;font-weight:400;line-height:1.6;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0 0;white-space:pre-line}
+  .disclaimer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:14px}
+  .grade .num{font-size:1.7rem}
   .rules{color:var(--muted);font-size:.95rem;margin:0}
   @media (max-width:480px){ header.board h1{font-size:1.5rem} .grade .num{flex-basis:52px;height:52px;font-size:1.3rem} }
 </style>
@@ -2244,6 +2250,505 @@ addTo(8, 'Math', 'transformations',
 );
 </script>
 
+<script>
+// ================= GED STRUCTURE =================
+// The site is organized around the four GED tests. Each GED topic pulls in whole source topics from the question
+// library above (`from`: "grade|subject|topicId") and can get extra questions via gedAdd(). `w` = share of the practice test.
+const GED = {
+  Math: { name: 'Mathematical Reasoning', short: 'Math', icon: '➗', minutes: 115,
+    about: 'The real test is 115 minutes with an on-screen calculator and a formula sheet. About 45% is quantitative problem solving (numbers, geometry, data) and 55% is algebra.',
+    topics: [
+      { id: 'numbers', name: 'Numbers, integers & fractions', w: 8, from: ['7|Math|integers'],
+        covers: 'Positive & negative numbers · absolute value · adding, multiplying & dividing fractions',
+        intro: 'Everything else on the math test builds on number sense. Most mistakes here are sign errors and fraction slips.',
+        points: ['Same signs add and keep the sign; different signs subtract and keep the sign of the larger absolute value.', 'Subtracting a number is adding its opposite: 5 − (−3) = 8.', 'Multiplying or dividing: same signs → positive, different signs → negative.', 'Fractions: add/subtract with a common denominator; multiply straight across; divide by "keep, change, flip."'],
+        ex: ['−3/4 ÷ 1/2', 'Keep −3/4, change ÷ to ×, flip 1/2 to 2/1: −3/4 × 2/1 = −6/4 = −3/2 (or −1½). Different signs → negative.'] },
+      { id: 'ratios', name: 'Ratios, rates & proportions', w: 9, from: ['7|Math|ratios'],
+        covers: 'Unit rates · better buys · proportions · unit conversions · scale',
+        intro: 'GED word problems love rates: price per item, miles per hour, and scaling recipes or maps.',
+        points: ['A unit rate is the amount for ONE: divide.', 'Proportion: two equal ratios. Cross-multiply to solve a/b = c/x.', 'To compare deals, find each unit price — lower is the better buy.', 'Convert units by multiplying or dividing by the conversion factor (12 in = 1 ft, 60 min = 1 hr).'],
+        ex: ['A car goes 234 miles on 9 gallons. How far on 14 gallons?', 'Unit rate: 234 ÷ 9 = 26 miles per gallon. 26 × 14 = 364 miles.'] },
+      { id: 'percents', name: 'Percents & money', w: 9, from: ['7|Math|percents'],
+        covers: 'Percent of a number · discounts, tax & tips · percent change · simple interest',
+        intro: 'Percents show up constantly on the GED, usually inside money problems.',
+        points: ['Percent → decimal: divide by 100 (8% = 0.08).', 'Part = percent × whole. Whole = part ÷ percent.', 'Percent change = (new − original) ÷ original × 100.', 'Simple interest: I = Prt (this formula is on the GED formula sheet).'],
+        ex: ['A $60 jacket is 25% off, then 8% tax is added. What do you pay?', 'Sale price: 60 × 0.75 = $45. With tax: 45 × 1.08 = $48.60.'] },
+      { id: 'exponents', name: 'Exponents, roots & scientific notation', w: 7, from: ['8|Math|exponents', '8|Math|roots'],
+        covers: 'Exponent rules · negative & zero exponents · square & cube roots · scientific notation · rational vs. irrational',
+        intro: 'Exponents are shorthand for repeated multiplication. Learn a few rules and these become quick points.',
+        points: ['Multiply same bases → add exponents. Divide → subtract. Power of a power → multiply.', 'x⁰ = 1 and x⁻ⁿ = 1/xⁿ.', '√ undoes squaring; ∛ undoes cubing. Know perfect squares up to 144.', 'Scientific notation: a × 10ⁿ with 1 ≤ a < 10. Positive n = big number, negative n = small number.'],
+        ex: ['Simplify (x³)² · x⁻⁴', '(x³)² = x⁶. x⁶ · x⁻⁴ = x²'] },
+      { id: 'data', name: 'Data, statistics & probability', w: 10, from: ['7|Math|stats'],
+        covers: 'Mean, median, mode & range · reading tables & charts · probability · counting outcomes',
+        intro: 'You will read charts and tables on every GED test, not just math.',
+        points: ['Mean = sum ÷ count. Median = middle value when sorted. Mode = most frequent. Range = max − min.', 'An outlier pulls the mean much more than the median.', 'Probability = favorable ÷ total. Independent events: multiply.', 'Read chart titles, axis labels, and units before answering.'],
+        ex: ['Scores: 70, 85, 90, 95, 100. Mean and median?', 'Mean = 440 ÷ 5 = 88. Median = 90 (the middle value).'] },
+      { id: 'geometry', name: 'Area, perimeter & angles', w: 10, from: ['7|Math|geometry', '8|Math|transformations'],
+        covers: 'Perimeter & area of rectangles, triangles, trapezoids & circles · angle relationships · transformations',
+        intro: 'The GED formula sheet gives you most area formulas — your job is choosing the right one and plugging in carefully.',
+        points: ['Perimeter = distance around (add the sides). Area = space inside (square units).', 'Circle: C = πd, A = πr². Use the radius, not the diameter, for area.', 'Triangle angles add to 180°; straight-line angles add to 180°; complementary angles add to 90°.', 'Parallel lines cut by a transversal: corresponding and alternate angles are equal.'],
+        ex: ['A circular garden has a diameter of 10 ft. What is its area? (π ≈ 3.14)', 'r = 5. A = 3.14 × 5² = 3.14 × 25 = 78.5 ft².'] },
+      { id: 'solids', name: 'Pythagorean theorem, volume & surface area', w: 9, from: ['8|Math|pythagorean', '8|Math|volume'],
+        covers: 'a² + b² = c² · distance · volume of prisms, cylinders, cones, pyramids & spheres · surface area',
+        intro: 'These are formula problems. Draw a quick sketch, label what you know, then pick the formula from the sheet.',
+        points: ['Right triangles: a² + b² = c², where c is the hypotenuse (longest side).', 'Prism or cylinder: V = (area of base) × height.', 'Cone or pyramid: V = ⅓ × (area of base) × height. Sphere: V = (4/3)πr³.', 'Surface area = total area of all the faces (rectangular prism: 2lw + 2lh + 2wh).'],
+        ex: ['A box is 4 × 3 × 2 ft. Volume and surface area?', 'V = 4 × 3 × 2 = 24 ft³. SA = 2(12) + 2(8) + 2(6) = 24 + 16 + 12 = 52 ft².'] },
+      { id: 'expressions', name: 'Expressions & polynomials', w: 9, from: ['7|Math|expressions'],
+        covers: 'Order of operations · writing expressions from words · combining like terms · multiplying & factoring polynomials',
+        intro: 'Algebra is over half of the GED math test, and it starts with simplifying expressions.',
+        points: ['Order of operations: parentheses, exponents, multiply/divide, add/subtract (left to right).', 'Only combine LIKE terms (same variable and exponent): 3x² + 2x² = 5x², but 3x² + 2x can\'t combine.', 'Distribute: a(b + c) = ab + ac. FOIL two binomials: (x + 2)(x + 3) = x² + 5x + 6.', 'Factor out the greatest common factor first: 6x² + 9x = 3x(2x + 3).'],
+        ex: ['Multiply (x − 4)(x + 7)', 'First x·x = x², Outer 7x, Inner −4x, Last −28 → x² + 3x − 28.'] },
+      { id: 'equations', name: 'Equations, inequalities & systems', w: 12, from: ['7|Math|equations', '8|Math|equations'],
+        covers: 'One- and multi-step equations · word problems · inequalities · systems of two equations',
+        intro: 'Solving equations is the single most-tested algebra skill on the GED.',
+        points: ['Do the same thing to both sides. Undo adding/subtracting first, then multiplying/dividing.', 'Distribute and combine like terms before moving terms across.', 'Inequalities solve the same way, but FLIP the sign when you multiply or divide by a negative.', 'Systems: substitute one equation into the other, or add them to cancel a variable. Tip: you can also plug the answer choices back in.'],
+        ex: ['Solve 3(x − 2) = x + 10', 'Distribute: 3x − 6 = x + 10. Subtract x: 2x − 6 = 10. Add 6: 2x = 16. x = 8.'] },
+      { id: 'functions', name: 'Graphs, slope & functions', w: 10, from: ['8|Math|linear'],
+        covers: 'Slope · y = mx + b · function notation · reading graphs · linear vs. nonlinear · proportional relationships',
+        intro: 'GED questions ask you to read graphs, find slope, and match equations to situations.',
+        points: ['Slope = rise ÷ run = (y₂ − y₁) ÷ (x₂ − x₁). Positive goes up left-to-right.', 'y = mx + b: m is the slope (rate), b is the y-intercept (starting value).', 'f(x) notation: f(3) means "plug in 3 for x."', 'A function gives exactly ONE output for each input.'],
+        ex: ['A plumber charges $50 plus $30 per hour. Write the cost as a function.', 'C(h) = 30h + 50. Slope 30 = cost per hour; intercept 50 = the flat fee. C(3) = 90 + 50 = $140.'] },
+      { id: 'quadratics', name: 'Quadratic equations', w: 7, from: [],
+        covers: 'Solving x² = k · factoring trinomials · the quadratic formula · evaluating quadratic expressions',
+        intro: 'A quadratic has an x² term and can have two solutions. The GED formula sheet includes the quadratic formula.',
+        points: ['Set the equation equal to 0 first.', 'Factor: x² + 5x + 6 = (x + 2)(x + 3), so x = −2 or x = −3 (zero product property).', 'x² = 49 → x = 7 or x = −7.', 'Quadratic formula for ax² + bx + c = 0: x = (−b ± √(b² − 4ac)) ÷ 2a.'],
+        ex: ['Solve x² − x − 12 = 0', 'Find two numbers that multiply to −12 and add to −1: −4 and 3. (x − 4)(x + 3) = 0 → x = 4 or x = −3.'] },
+    ] },
+  RLA: { name: 'Reasoning Through Language Arts', short: 'Language Arts', icon: '📖', minutes: 150,
+    about: 'The real test is 150 minutes, including a 45-minute essay. About 75% of the reading is informational (nonfiction) and 25% is literature, plus grammar and editing questions.',
+    topics: [
+      { id: 'info', name: 'Reading informational texts', w: 25, from: ['7|English|writing'],
+        covers: 'Main idea & details · text structure · author\'s purpose · fact vs. opinion · inference · transitions',
+        intro: 'Most GED reading passages are nonfiction: articles, speeches, workplace documents, and historical texts.',
+        points: ['Main idea = what the WHOLE passage is about. Details support it.', 'An inference is a conclusion backed by clues in the text — not a wild guess.', 'Author\'s purpose: persuade, inform, or entertain. Look at word choice.', 'Text structures: cause/effect, compare/contrast, chronological, problem/solution, description.'],
+        ex: ['"Sales of electric cars tripled after the city added 200 charging stations." What can you infer?', 'A lack of charging stations had been holding back electric car sales. The text links the stations to the jump in sales.'] },
+      { id: 'literature', name: 'Reading literature', w: 15, from: ['7|English|reading', '7|English|figurative', '8|English|literary'],
+        covers: 'Plot, theme & conflict · point of view · figurative language · tone & mood · irony & symbolism',
+        intro: 'About a quarter of the reading is fiction. Questions ask what characters want, how they change, and what the story means.',
+        points: ['Theme is a message about life, written as a full sentence.', 'Point of view: first person (I), third limited (one mind), third omniscient (many minds).', 'Figurative language: simile, metaphor, personification, hyperbole — ask what quality is being compared.', 'Tone is the author\'s attitude; mood is how the reader feels.'],
+        ex: ['"The wind clawed at the shutters all night." What does "clawed" suggest?', 'Personification that makes the wind seem violent and threatening, creating a tense mood.'] },
+      { id: 'argument', name: 'Analyzing arguments', w: 20, from: ['8|English|argument'],
+        covers: 'Claims & evidence · counterclaims · credible sources · faulty reasoning · comparing two arguments',
+        intro: 'The GED essay and many reading questions ask you to judge which argument is better supported.',
+        points: ['A claim is a position; evidence (facts, data, expert testimony) supports it.', 'Strong arguments address counterclaims and use credible, relevant sources.', 'Watch for fallacies: attacking the person, bandwagon, false either/or, hasty generalization, slippery slope.', 'When comparing two texts, ask: which one uses more specific, trustworthy evidence?'],
+        ex: ['Text A cites a university study; Text B says "everyone knows" its claim. Which is better supported?', 'Text A — it gives specific evidence from a credible source. "Everyone knows" is a bandwagon appeal, not evidence.'] },
+      { id: 'vocab', name: 'Vocabulary & word meaning', w: 10, from: ['7|English|vocab', '8|English|vocab'],
+        covers: 'Context clues · synonyms & antonyms · prefixes, suffixes & roots · connotation · multiple-meaning words',
+        intro: 'GED questions ask what a word means in a specific passage — context is everything.',
+        points: ['Reread the sentence and swap each answer choice in; pick the one that keeps the meaning.', 'Break words into parts: prefix + root + suffix.', 'Connotation is the feeling a word carries (confident vs. arrogant).', 'Multiple-meaning words depend on the sentence around them.'],
+        ex: ['"The senator\'s remarks were deliberately vague to avoid upsetting voters." What does "vague" mean?', 'Unclear or not specific — the senator avoided details on purpose.'] },
+      { id: 'grammar', name: 'Grammar & usage', w: 15, from: ['7|English|grammar', '7|English|usage', '8|English|agreement', '8|English|verbals', '8|English|voice'],
+        covers: 'Subject-verb agreement · pronouns · verb tenses · commonly confused words · active & passive voice · modifiers',
+        intro: 'GED editing questions give you a sentence with a drop-down menu — you pick the correct word or phrase.',
+        points: ['Verbs agree with their subject — ignore phrases in between ("The box of pens IS…").', 'Pronouns must match their antecedent and use the right case (she/her, who/whom).', 'Keep verb tenses consistent unless the time really changes.', 'Know the confusables: their/there/they\'re, its/it\'s, your/you\'re, affect/effect, then/than.'],
+        ex: ['"Each of the employees (need / needs) a badge."', '"needs" — the subject is "Each," which is singular.'] },
+      { id: 'mechanics', name: 'Sentences, punctuation & spelling', w: 10, from: ['7|English|sentences', '8|English|mechanics'],
+        covers: 'Fragments & run-ons · commas, semicolons & colons · capitalization · apostrophes · commonly misspelled words',
+        intro: 'Editing questions often hide a run-on sentence, a missing comma, or a misspelled word.',
+        points: ['A complete sentence needs a subject, a verb, and a complete thought.', 'Fix run-ons with a period, a semicolon, or a comma + and/but/so.', 'Colons introduce lists after a complete sentence; semicolons join two complete sentences.', 'Apostrophes show possession (the manager\'s office) or contractions — never plurals.'],
+        ex: ['Fix: "The meeting ran late we missed the train."', 'Run-on. "The meeting ran late, so we missed the train." or "The meeting ran late; we missed the train."'] },
+      { id: 'essay', name: 'The extended response (essay)', w: 5, from: [],
+        covers: 'Reading two opposing passages · writing a thesis · choosing evidence · organizing paragraphs · the scoring rubric',
+        intro: 'The GED essay gives you two passages that disagree. You explain which argument is BETTER SUPPORTED and why — not your own opinion on the issue.',
+        points: ['Your thesis names which passage is better supported: "Passage A presents the stronger argument because…"', 'Use specific evidence from BOTH passages — quote or paraphrase.', 'Organize: introduction with thesis → 2–3 body paragraphs (one reason each) → short conclusion.', 'Scored on: creating an argument with evidence, organization, and clear, correct writing. Aim for 4–7 solid paragraphs in 45 minutes.'],
+        ex: ['Prompt: Passage A (backed by crime statistics) argues for more streetlights; Passage B (personal stories) argues against. Thesis?', '"Passage A is better supported because it uses citywide crime data, while Passage B relies on a few personal stories that may not represent most residents."'] },
+    ] },
+};
+// Attach every source-library item to its GED topic; gedAdd() appends new ones.
+function gedAdd(s, id, ...items){ const t = GED[s].topics.find(t => t.id === id); if (!t) throw new Error(`No GED topic ${s}/${id}`); for (const it of items){ it.ged = id; t.items.push(it); } }
+</script>
+
+<script>
+GED.Science = { name: 'Science', short: 'Science', icon: '🔬', minutes: 90,
+  about: 'The real test is 90 minutes: about 40% life science, 40% physical science, and 20% Earth & space science. Many questions include charts, graphs, or a short experiment to read.',
+  topics: [
+    { id: 'body', name: 'Human body & health', w: 14, from: ['7|Science|body'],
+      covers: 'Body systems & organs · homeostasis · nutrition · disease, germs & the immune system',
+      intro: 'Life science on the GED leans heavily on the human body and staying healthy.',
+      points: ['Body systems work together to keep conditions stable inside you (homeostasis) — like sweating to cool down.', 'Circulatory + respiratory: deliver oxygen. Digestive: nutrients. Nervous + endocrine: control signals. Immune: defense.', 'Nutrients: carbohydrates (energy), proteins (building and repair), fats (stored energy), vitamins and minerals.', 'Pathogens (bacteria, viruses, fungi, parasites) cause infectious disease; vaccines train the immune system.'],
+      ex: ['Why does your heart beat faster during exercise?', 'Muscles need more oxygen. The circulatory system speeds up to deliver it and remove carbon dioxide — keeping homeostasis.'] },
+    { id: 'cells', name: 'Cells, genetics & heredity', w: 13, from: ['7|Science|cells', '7|Science|genetics'],
+      covers: 'Cell parts & jobs · plant vs. animal cells · DNA, genes & alleles · Punnett squares · mitosis',
+      intro: 'All living things are built from cells, and the instructions inside them (DNA) are passed from parent to offspring.',
+      points: ['Nucleus holds DNA; mitochondria release energy; chloroplasts (plants) make food; the membrane controls what enters.', 'Genes are sections of DNA; alleles are versions of a gene. Dominant alleles hide recessive ones.', 'Punnett square: each box = 25% chance for one offspring.', 'Mitosis makes two identical body cells; meiosis makes sex cells with half the DNA.'],
+      ex: ['Two Bb parents (B = brown eyes). Chance of a blue-eyed (bb) child?', 'Punnett square: BB, Bb, Bb, bb → 1 of 4 = 25%.'] },
+    { id: 'ecology', name: 'Ecosystems & evolution', w: 13, from: ['7|Science|ecosystems', '8|Science|life'],
+      covers: 'Food chains & webs · energy pyramids · relationships between organisms · natural selection · evidence of evolution',
+      intro: 'Ecology is about how living things interact; evolution explains how populations change over time.',
+      points: ['Energy flows Sun → producers → consumers; only about 10% passes to each higher level.', 'Relationships: predation, competition, mutualism (+/+), commensalism (+/0), parasitism (+/−).', 'Natural selection: individuals with helpful traits survive and reproduce more, so those traits spread.', 'Evidence for evolution: fossils, similar body structures, DNA comparisons.'],
+      ex: ['If a disease wipes out most rabbits in a food web, what happens to foxes that eat them?', 'Fox populations likely drop from lack of food, while grass populations (rabbit food) may increase.'] },
+    { id: 'chemistry', name: 'Chemistry: matter & reactions', w: 20, from: ['7|Science|matter', '8|Science|atoms', '8|Science|reactions'],
+      covers: 'Atoms & the periodic table · states & changes of matter · mixtures & solutions · chemical equations · density · acids & bases',
+      intro: 'GED chemistry is about what matter is made of and how it changes.',
+      points: ['Atoms have protons (+), neutrons (0), electrons (−). Atomic number = protons.', 'Physical changes keep the same substance; chemical changes make new substances.', 'Conservation of mass: atoms rearrange, so a balanced equation has the same atoms on each side.', 'Density = mass ÷ volume; pH below 7 is acidic, above 7 is basic.'],
+      ex: ['Is 2H₂ + O₂ → 2H₂O balanced?', 'Left: 4 H, 2 O. Right: 4 H, 2 O. Yes, it is balanced.'] },
+    { id: 'physics', name: 'Physics: energy, motion & waves', w: 20, from: ['8|Science|forces', '8|Science|energy'],
+      covers: 'Speed, velocity & acceleration · Newton\'s laws · work & energy · kinetic & potential energy · heat · waves & light',
+      intro: 'Physics questions often give you a formula and ask you to use it — read carefully and watch the units.',
+      points: ['Speed = distance ÷ time. Acceleration = change in velocity ÷ time.', 'Newton\'s laws: inertia; F = ma; every action has an equal and opposite reaction.', 'Kinetic energy = ½mv² (motion). Potential energy = mgh (height). Energy changes form but is conserved.', 'Heat moves by conduction, convection, and radiation. Waves have wavelength, frequency, and amplitude.'],
+      ex: ['A 1,200 kg car accelerates at 3 m/s². What force is needed?', 'F = m × a = 1,200 × 3 = 3,600 N.'] },
+    { id: 'earth', name: 'Earth & space science', w: 10, from: ['7|Science|earth', '8|Science|earthspace'],
+      covers: 'Earth\'s layers & plate tectonics · rocks & the water cycle · weather & natural hazards · the Moon, seasons & the solar system',
+      intro: 'Earth science covers the systems that shape our planet and its place in space.',
+      points: ['Plate movement causes earthquakes, volcanoes, and mountains.', 'The water cycle: evaporation → condensation → precipitation → collection.', 'Seasons come from Earth\'s tilt; tides come from the Moon\'s gravity.', 'Natural resources are renewable (solar, wind) or nonrenewable (coal, oil).'],
+      ex: ['Why does Earth have more earthquakes along the edges of the Pacific Ocean?', 'The Pacific is ringed by plate boundaries (the Ring of Fire), where plates collide and slide.'] },
+    { id: 'practices', name: 'Science practices & reading data', w: 10, from: ['7|Science|method'],
+      covers: 'Hypotheses & variables · controls · reading graphs & tables · drawing conclusions from data',
+      intro: 'Around half of GED science questions test reasoning skills more than memorized facts.',
+      points: ['Independent variable = what you change; dependent = what you measure; controls stay the same.', 'A good hypothesis is testable: "If ___, then ___."', 'Read the title, axes, and units before interpreting a graph.', 'A conclusion must be supported by the data — correlation doesn\'t always mean one thing caused the other.'],
+      ex: ['A study finds towns with more ice cream sales have more sunburns. Does ice cream cause sunburn?', 'No. A third factor — hot, sunny weather — increases both. That\'s correlation, not causation.'] },
+  ] };
+
+GED['Social Studies'] = { name: 'Social Studies', short: 'Social Studies', icon: '🌎', minutes: 70,
+  about: 'The real test is 70 minutes: about 50% civics & government, 20% U.S. history, 15% economics, and 15% geography & the world. Expect maps, charts, and historical documents.',
+  topics: [
+    { id: 'civics', name: 'Civics & government', w: 35, from: ['7|Social Studies|government', '8|Social Studies|constitution'],
+      covers: 'Types of government · the Constitution & its principles · three branches · checks & balances · Bill of Rights · federalism · elections',
+      intro: 'Civics is about half of the GED Social Studies test — the biggest single area on it.',
+      points: ['Principles: popular sovereignty, separation of powers, checks and balances, federalism, rule of law.', 'Legislative (Congress) makes laws; executive (President) enforces them; judicial (courts) interprets them.', 'The Bill of Rights (first 10 amendments) protects freedoms like speech, religion, and due process.', 'Federalism splits power between the national and state governments.'],
+      ex: ['The Supreme Court strikes down a law passed by Congress. Which principle is this?', 'Checks and balances (specifically judicial review) — the courts limit the power of Congress.'] },
+    { id: 'founding', name: 'Colonial America & the founding', w: 15, from: ['8|Social Studies|founding'],
+      covers: 'The 13 colonies · causes of the Revolution · the Declaration of Independence · key battles & founders',
+      intro: 'The ideas behind the American Revolution — natural rights and government by consent — show up again and again on the GED.',
+      points: ['British taxes after 1763 (Stamp Act, Tea Act) led to "no taxation without representation."', 'The Declaration of Independence (1776): natural rights of life, liberty, and the pursuit of happiness.', 'Key turning points: Saratoga (French alliance), Yorktown (British surrender, 1781).', 'Enlightenment thinkers like John Locke shaped the founders\' ideas.'],
+      ex: ['What idea from the Declaration of Independence says government gets its power from the people?', '"Consent of the governed" — governments get their just powers from the people they govern.'] },
+    { id: 'nineteenth', name: 'Expansion, Civil War & Reconstruction', w: 15, from: ['8|Social Studies|expansion', '8|Social Studies|civilwar', '8|Social Studies|timeline'],
+      covers: 'Westward expansion · the Industrial Revolution · causes & events of the Civil War · Reconstruction · key dates',
+      intro: 'The 1800s transformed the U.S. through new land, new industry, and a war over slavery.',
+      points: ['Louisiana Purchase (1803) and Manifest Destiny drove westward expansion — and forced removal of Native Americans.', 'Slavery\'s spread into new territories was the core cause of the Civil War (1861–1865).', 'The Emancipation Proclamation (1863) and the 13th Amendment (1865) ended slavery.', 'Reconstruction (1865–1877) rebuilt the South; afterward Jim Crow laws enforced segregation.'],
+      ex: ['Why did the Kansas-Nebraska Act increase tension?', 'It let settlers vote on slavery, overturning the old Missouri Compromise line and leading to violence in "Bleeding Kansas."'] },
+    { id: 'modern', name: 'Modern U.S. history (1900s–today)', w: 10, from: [],
+      covers: 'Progressive Era · World War I · the Great Depression & New Deal · World War II · the Cold War · civil rights · recent history',
+      intro: 'The 20th century made the U.S. a world power and expanded rights at home.',
+      points: ['Progressive Era (1890s–1920s): reforms against child labor and corruption; women won the vote (19th Amendment, 1920).', 'Great Depression (1929) → FDR\'s New Deal created programs like Social Security.', 'World War II (1941–1945 for the U.S.) → the Cold War with the Soviet Union until 1991.', 'Civil Rights Movement: Brown v. Board (1954), Montgomery Bus Boycott, Civil Rights Act (1964), Voting Rights Act (1965).'],
+      ex: ['What event brought the U.S. into World War II?', 'Japan\'s attack on Pearl Harbor on December 7, 1941.'] },
+    { id: 'economics', name: 'Economics', w: 15, from: ['7|Social Studies|economics'],
+      covers: 'Supply & demand · scarcity & opportunity cost · types of economies · GDP, inflation & unemployment · the Federal Reserve · personal finance',
+      intro: 'Economics questions range from personal choices (budgets, credit) to the national economy.',
+      points: ['Scarcity forces choices; the opportunity cost is the next-best option you give up.', 'Higher demand or lower supply → higher prices.', 'GDP measures a country\'s total output; inflation is rising prices; a recession is a shrinking economy.', 'Fiscal policy = government taxing and spending. Monetary policy = the Federal Reserve adjusting interest rates and the money supply.'],
+      ex: ['To fight high inflation, what does the Federal Reserve usually do?', 'Raise interest rates, which makes borrowing more expensive and slows spending.'] },
+    { id: 'world', name: 'Geography & the world', w: 10, from: ['7|Social Studies|geography', '7|Social Studies|history'],
+      covers: 'Map skills · continents, countries & landforms · early civilizations · world religions · migration & human–environment interaction',
+      intro: 'This area connects places, people, and history — how geography shaped civilizations and why people move.',
+      points: ['Latitude measures north–south of the Equator; longitude measures east–west of the Prime Meridian.', 'Early civilizations grew along rivers (Nile, Tigris–Euphrates, Indus, Yellow) because of water and fertile soil.', 'Push factors (war, poverty) drive people away; pull factors (jobs, freedom) draw them in.', 'People change environments (dams, farming) and environments shape how people live.'],
+      ex: ['Why did ancient Egypt develop along the Nile?', 'The river\'s yearly floods left fertile soil for farming in a desert, plus water and a transportation route.'] },
+  ] };
+
+for (const s in GED) for (const t of GED[s].topics){
+  t.items = t.from.flatMap(src => { const [g, subj, id] = src.split('|'); return BANK[g][subj].filter(it => it.topic === id); });
+  for (const it of t.items) it.ged = t.id;
+}
+</script>
+
+<script>
+// ================= GED Math: new content =================
+{
+  // Format a polynomial from coefficients [a, b, c] as "ax² + bx + c".
+  const poly = (...cs) => { const deg = cs.length - 1; let out = ''; cs.forEach((c, i) => { if (!c) return; const p = deg - i, abs = Math.abs(c), v = p === 0 ? '' : p === 1 ? 'x' : `x${'⁰¹²³⁴'[p]}`;
+    const body = (abs === 1 && p > 0 ? '' : abs) + v; out += out ? ` ${c < 0 ? '−' : '+'} ${body}` : `${c < 0 ? '−' : ''}${body}`; }); return out || '0'; };
+  const bin = r => r === 0 ? 'x' : `x ${r < 0 ? '−' : '+'} ${Math.abs(r)}`;
+  gedAdd('Math', 'quadratics',
+    () => { const n = R(2, 15), k = n * n;
+      return MQ(`Solve: x² = ${k}`, `x = ${n} or x = −${n}`, [`x = ${n} only`, `x = ${k / 2}`, `x = −${n} only`], `Take the square root of both sides. Both ${n}² and (−${n})² equal ${k}, so x = ±${n}.`); },
+    () => { const a = pick([2, 3, 4, 5]), n = R(2, 9), k = a * n * n;
+      return MQ(`Solve: ${a}x² = ${k}`, `x = ±${n}`, [`x = ±${n * n}`, `x = ±${fmt(Math.sqrt(k))}`, `x = ${k / a}`], `Divide by ${a}: x² = ${k / a}. Square root: x = ±${n}.`); },
+    () => { let p, q; do { p = nz(-9, 9); q = nz(-9, 9); } while (p === q || p === -q);
+      return MQ(`Solve: (${bin(-p)})(${bin(-q)}) = 0`, `x = ${Math.min(p, q)} or x = ${Math.max(p, q)}`, [`x = ${-Math.max(p, q)} or x = ${-Math.min(p, q)}`, `x = ${p * q}`, `x = ${p + q}`],
+        `Zero product property: if two factors multiply to 0, one of them must be 0. ${bin(-p)} = 0 → x = ${p}; ${bin(-q)} = 0 → x = ${q}.`); },
+    () => { let p, q; do { p = nz(-8, 8); q = nz(-8, 8); } while (p === -q);
+      const b = p + q, c = p * q, right = `(${bin(p)})(${bin(q)})`;
+      return MQ(`Factor: ${poly(1, b, c)}`, right, [`(${bin(-p)})(${bin(-q)})`, `(${bin(p)})(${bin(-q)})`, `(${bin(b)})(${bin(c)})`].filter(s => s !== right),
+        `Find two numbers that MULTIPLY to ${c} and ADD to ${b}: ${p} and ${q}. So ${poly(1, b, c)} = ${right}. Check by FOIL.`); },
+    () => { let p, q; do { p = nz(-8, 8); q = nz(-8, 8); } while (p === q);
+      const b = -(p + q), c = p * q;
+      return MQ(`Solve: ${poly(1, b, c)} = 0`, `x = ${Math.min(p, q)} or x = ${Math.max(p, q)}`, [`x = ${-Math.max(p, q)} or x = ${-Math.min(p, q)}`, `x = ${c}`, `x = ${b} or x = ${c}`],
+        `Factor: two numbers that multiply to ${c} and add to ${b} are ${-p} and ${-q}, so (${bin(-p)})(${bin(-q)}) = 0. Set each factor to 0: x = ${p} or x = ${q}.`); },
+    () => { const a = nz(-3, 3), b = R(-6, 6), c = R(-9, 9), x = R(-4, 4), v = a * x * x + b * x + c;
+      return MQ(`If f(x) = ${poly(a, b, c)}, what is f(${x})?`, v, [a * x * 2 + b * x + c, (a * x) ** 2 + b * x + c, a * x * x - b * x + c],
+        `Substitute ${x} for every x, using parentheses: ${a}(${x})² + ${b}(${x}) + ${c} = ${a}(${x * x}) + ${b * x} + ${c} = ${v}. Square first, then multiply.`); },
+    () => { const [a, b, c] = pick([[1, -6, 9], [1, 4, 4], [1, 2, 5], [1, -5, 6], [2, 3, 5], [1, 0, -16], [1, 1, 1], [3, -6, 3], [1, -2, -8], [4, 4, 1], [1, 3, 10]]), D = b * b - 4 * a * c, ans = D > 0 ? 'two real solutions' : D === 0 ? 'one real solution' : 'no real solutions';
+      return MQ(`Using the discriminant b² − 4ac, how many real solutions does ${poly(a, b, c)} = 0 have?`, ans, ['two real solutions', 'one real solution', 'no real solutions'].filter(x => x !== ans),
+        `b² − 4ac = (${b})² − 4(${a})(${c}) = ${b * b} − ${4 * a * c} = ${D}. Positive → two solutions; zero → one; negative → none (you can't take the square root of a negative).`); },
+    () => { const w = R(2, 12), d = R(1, 6), A = w * (w + d);
+      return MQ(`A rectangle is ${d} feet longer than it is wide. Its area is ${A} ft². What is its width?`, `${w} ft`, [`${w + d} ft`, `${fmt(A / d)} ft`, `${w + 1} ft`],
+        `Let width = x, length = x + ${d}. x(x + ${d}) = ${A} → x² + ${d}x − ${A} = 0. Factor: (x − ${w})(x + ${w + d}) = 0. Width can't be negative, so x = ${w} ft. (Check: ${w} × ${w + d} = ${A}.)`); },
+  );
+  gedAdd('Math', 'expressions',
+    () => { const p = nz(-9, 9), q = nz(-9, 9);
+      return MQ(`Multiply: (${bin(p)})(${bin(q)})`, poly(1, p + q, p * q), [poly(1, 0, p * q), poly(1, p * q, p + q), poly(1, p + q, -p * q)],
+        `FOIL: First x·x = x², Outer ${q}x, Inner ${p}x, Last ${p}·${q} = ${p * q}. Combine the middle: ${poly(1, p + q, p * q)}.`); },
+    () => { const A = [nz(-6, 6), R(-9, 9), R(-9, 9)], B = [nz(-6, 6), R(-9, 9), R(-9, 9)], sub = Math.random() < .5, res = A.map((a, i) => sub ? a - B[i] : a + B[i]);
+      return MQ(`Simplify: (${poly(...A)}) ${sub ? '−' : '+'} (${poly(...B)})`, poly(...res), [poly(...A.map((a, i) => sub ? a + B[i] : a - B[i])), poly(res[0], res[1], sub ? A[2] + B[2] : A[2] - B[2]), poly(res[0] + res[1], 0, res[2])],
+        `${sub ? 'Subtracting a polynomial means changing the sign of EVERY term in the second one, then ' : ''}combine like terms: x² terms ${A[0]} ${sub ? '−' : '+'} ${sgn(B[0])} = ${res[0]}; x terms ${A[1]} ${sub ? '−' : '+'} ${sgn(B[1])} = ${res[1]}; constants ${A[2]} ${sub ? '−' : '+'} ${sgn(B[2])} = ${res[2]}.`); },
+    () => { const g = R(2, 6), a = R(1, 5), b = nz(-7, 7);
+      return MQ(`Factor out the greatest common factor: ${poly(g * a, g * b, 0)}`, `${g}x(${poly(a, b)})`, [`${g}(${poly(a, 0, b)})`, `x(${poly(g * a, g * b)})`, `${g}x(${poly(g * a, b)})`],
+        `Both terms share ${g} and x. Divide each term by ${g}x: ${poly(g * a, 0, 0)} ÷ ${g}x = ${poly(a, 0)}, and ${poly(g * b, 0)} ÷ ${g}x = ${b}. Result: ${g}x(${poly(a, b)}).`); },
+    () => { const n = R(2, 12);
+      return MQ(`Factor: x² − ${n * n}`, `(x + ${n})(x − ${n})`, [`(x − ${n})²`, `(x + ${n})²`, `(x − ${n * n})(x + 1)`], `This is a difference of squares: a² − b² = (a + b)(a − b). x² − ${n}² = (x + ${n})(x − ${n}).`); },
+    () => { const a = nz(-6, 6), b = nz(-6, 6), m = R(1, 4), n = R(1, 4), sup = k => k <= 1 ? '' : '⁰¹²³⁴⁵⁶⁷⁸⁹'[k], num = v => String(v).replace('-', '−');
+      const term = (c, k) => k === 0 ? num(c) : `${num(c)}x${sup(k)}`;
+      return MQ(`Multiply: (${term(a, m)})(${term(b, n)})`, term(a * b, m + n), [term(a * b, m * n), term(a + b, m + n), term(a * b, Math.abs(m - n))], `Multiply the coefficients (${a} × ${sgn(b)} = ${a * b}) and ADD the exponents (x${sup(m) || ''} · x${sup(n) || ''} = x${sup(m + n)}).`); },
+  );
+  gedAdd('Math', 'functions',
+    () => { const [job, fee, rate, unit] = pick([['A plumber charges', R(40, 90), R(25, 70), 'hour'], ['A gym charges a sign-up fee of', R(20, 60), R(15, 40), 'month'], ['A taxi charges', R(2, 5), R(2, 4), 'mile'], ['A phone plan costs', R(10, 30), R(5, 15), 'GB of data'], ['A bike rental costs', R(5, 15), R(3, 9), 'hour']]), fmtEq = (m, b) => `C = ${m}x + ${b}`;
+      return MQ(`${job} $${fee} plus $${rate} per ${unit}. Which equation gives the total cost C for x ${unit}s?`, fmtEq(rate, fee), [fmtEq(fee, rate), `C = ${rate + fee}x`, `C = ${fee}x − ${rate}`], `The per-${unit} rate is the slope (${rate}); the one-time fee is the y-intercept (${fee}). C = ${rate}x + ${fee}.`); },
+    () => { const [s, c, ...w] = pick([['In C = 15h + 40 for a repair bill, what does 15 represent?','the cost per hour','the flat starting fee','the total cost','the number of hours'],['In C = 15h + 40 for a repair bill, what does 40 represent?','the flat fee charged before any hours','the cost per hour','the total cost after 1 hour','the number of repairs'],['A candle\'s height is h = 20 − 2t (t in hours). What does −2 mean?','the candle burns down 2 cm per hour','the candle starts at 2 cm tall','the candle grows 2 cm per hour','it burns out in 2 hours'],['A candle\'s height is h = 20 − 2t. What does 20 mean?','its starting height is 20 cm','it burns 20 cm per hour','it lasts 20 hours','its final height is 20 cm'],['Savings: S = 50w + 300 (w = weeks). What does 300 represent?','the amount saved at the start','the amount saved each week','savings after 50 weeks','the goal'],['Savings: S = 50w + 300. What does 50 represent?','the amount added each week','the starting amount','the number of weeks','the total savings']]);
+      return MQ(s, c, w, `In y = mx + b form, the number multiplied by the variable (m) is the rate of change per unit, and the constant (b) is the starting value when the variable is 0.`); },
+    () => { const xs = shuffle([-3, -2, -1, 0, 1, 2, 3, 4]).slice(0, 4), isF = Math.random() < .5, pairs = xs.map(x => [x, R(-5, 5)]); if (!isF) pairs.push([pairs[0][0], pairs[0][1] + R(1, 3)]);
+      return MQ(`Is this set of ordered pairs a function?\n{${shuffle(pairs).map(p => `(${p[0]}, ${p[1]})`).join(', ')}}`, isF ? 'Yes' : 'No', [isF ? 'No' : 'Yes'], isF ? 'Yes — every x-value appears only once, so each input has exactly one output.' : `No — the x-value ${pairs[0][0]} is paired with two different y-values. A function gives exactly ONE output for each input.`); },
+    () => { const A = nz(-6, 6), B = nz(-6, 6), C = R(-12, 12), m = -A / B, ms = Number.isInteger(m) ? String(m) : (m < 0 ? '−' : '') + frac(Math.abs(A), Math.abs(B));
+      return MQ(`What is the slope of the line ${A}x + ${B}y = ${C}?`, ms, [Number.isInteger(-m) ? String(-m) : (m > 0 ? '−' : '') + frac(Math.abs(A), Math.abs(B)), Number.isInteger(B / A) ? String(B / A) : frac(Math.abs(B), Math.abs(A)), String(A)],
+        `Solve for y: ${B}y = ${-A}x + ${C} → y = (${-A}/${B})x + … The slope is −A/B = ${ms}.`); },
+    () => { const m = nz(-5, 5);
+      return MQ(`A line has slope ${m}. As you move from left to right, the line:`, m > 0 ? 'rises (goes up)' : 'falls (goes down)', [m > 0 ? 'falls (goes down)' : 'rises (goes up)', 'stays flat', 'is vertical'], `Positive slope rises left to right; negative slope falls; zero slope is horizontal; an undefined slope is vertical.`); },
+  );
+  gedAdd('Math', 'data',
+    () => { const scores = Array.from({ length: 4 }, () => R(65, 95)), goal = pick([80, 85, 90]), need = goal * 5 - scores.reduce((a, b) => a + b, 0);
+      if (need > 100 || need < 0) return MQ('Your first four test scores are 80, 90, 70, and 85. What do you need on the fifth test to average 82?', 85, [82, 80, 90], 'Total needed = 82 × 5 = 410. Current total = 325. 410 − 325 = 85.');
+      return MQ(`Your first four test scores are ${scores.join(', ')}. What score do you need on the fifth test to average exactly ${goal}?`, need, [goal, Math.round(scores.reduce((a, b) => a + b, 0) / 4), need + 5], `The total needed for a ${goal} average on 5 tests is ${goal} × 5 = ${goal * 5}. Your current total is ${scores.reduce((a, b) => a + b, 0)}. ${goal * 5} − ${scores.reduce((a, b) => a + b, 0)} = ${need}.`); },
+    () => { const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May'], vals = months.map(() => R(3, 30) * 5), total = vals.reduce((a, b) => a + b, 0), ask = pick(['total', 'diff', 'percent']), i = R(0, 4), j = (i + R(1, 4)) % 5;
+      const table = `Units sold — ${months.map((m, k) => `${m}: ${vals[k]}`).join(', ')}`;
+      if (ask === 'total') return MQ(`${table}\nHow many units were sold in all five months?`, total, [total - vals[4], Math.max(...vals) * 5, total + 10], `Add them: ${vals.join(' + ')} = ${total}.`);
+      if (ask === 'diff') return MQ(`${table}\nHow many more units were sold in ${months[i]} than in ${months[j]}?`, vals[i] - vals[j], [vals[j] - vals[i] === vals[i] - vals[j] ? vals[i] : vals[j] - vals[i], vals[i] + vals[j], Math.abs(vals[i] - vals[j]) + 5], `${months[i]} (${vals[i]}) − ${months[j]} (${vals[j]}) = ${vals[i] - vals[j]}. A negative answer means ${months[i]} actually sold fewer.`);
+      const pct = fmt(vals[i] / total * 100); return MQ(`${table}\nAbout what percent of all units were sold in ${months[i]}?`, pct + '%', [fmt(vals[i] / 100 * 100) + '%', fmt(100 / 5) + '%', fmt(vals[i] / Math.max(...vals) * 100) + '%'], `Part ÷ whole × 100 = ${vals[i]} ÷ ${total} × 100 ≈ ${pct}%.`); },
+    () => { const a = R(2, 6), b = R(2, 6), c = R(2, 5), [x, y, z] = pick([['shirts', 'pairs of pants', 'pairs of shoes'], ['sandwiches', 'drinks', 'desserts'], ['colors', 'sizes', 'styles']]);
+      return MQ(`You have ${a} ${x}, ${b} ${y}, and ${c} ${z}. How many different combinations can you make choosing one of each?`, a * b * c, [a + b + c, a * b + c, a * b], `Fundamental counting principle: multiply the number of choices for each step. ${a} × ${b} × ${c} = ${a * b * c}.`); },
+    () => { const n = 6, vals = Array.from({ length: n }, () => R(1, 40)).sort((a, b) => a - b), med = (vals[2] + vals[3]) / 2, show = shuffle(vals);
+      return MQ(`What is the median of: ${show.join(', ')}?`, fmt(med), [vals[2], vals[3], fmt(vals.reduce((a, b) => a + b, 0) / n)], `Sort: ${vals.join(', ')}. With an even count there are two middle numbers (${vals[2]} and ${vals[3]}); the median is their average: (${vals[2]} + ${vals[3]}) ÷ 2 = ${fmt(med)}.`); },
+    () => { const base = Array.from({ length: 5 }, () => R(20, 40)), out = R(90, 150), all = [...base, out], meanB = base.reduce((a, b) => a + b, 0) / 5, meanA = all.reduce((a, b) => a + b, 0) / 6;
+      return MQ(`The data set ${base.join(', ')} has a mean of ${fmt(meanB)}. If the value ${out} is added, what happens?`, 'The mean increases a lot, but the median barely changes', ['The median increases a lot, but the mean barely changes', 'Both stay the same', 'Both decrease'], `An outlier (${out}) pulls the mean up to ${fmt(meanA)}, but the median only shifts to the next middle value. That's why the median is better for data with outliers, like home prices.`); },
+  );
+  gedAdd('Math', 'solids',
+    () => { const l = R(2, 12), w = R(2, 10), h = R(2, 9), SA = 2 * (l * w + l * h + w * h);
+      return MQ(`What is the surface area of a rectangular box ${l} in × ${w} in × ${h} in?`, SA + ' in²', [l * w * h + ' in²', l * w + l * h + w * h + ' in²', 6 * l * w + ' in²'], `SA = 2lw + 2lh + 2wh = 2(${l * w}) + 2(${l * h}) + 2(${w * h}) = ${SA} in². (${l * w * h} would be the volume.)`); },
+    () => { const s = R(2, 12), h = R(3, 15), V = s * s * h / 3;
+      return MQ(`A pyramid has a square base with sides of ${s} m and a height of ${h} m. What is its volume?`, fmt(V) + ' m³', [s * s * h + ' m³', fmt(s * h / 3) + ' m³', fmt(V * 2) + ' m³'], `V = ⅓ × (base area) × height = ⅓ × ${s * s} × ${h} = ${fmt(V)} m³.`); },
+    () => { const r = R(1, 6), h = R(2, 10), SA = +(2 * 3.14 * r * r + 2 * 3.14 * r * h).toFixed(2);
+      return MQ(`What is the surface area of a closed cylinder with radius ${r} cm and height ${h} cm? (π ≈ 3.14)`, fmt(SA) + ' cm²', [fmt(+(3.14 * r * r * h).toFixed(2)) + ' cm²', fmt(+(2 * 3.14 * r * h).toFixed(2)) + ' cm²', fmt(+(3.14 * r * r + 2 * 3.14 * r * h).toFixed(2)) + ' cm²'], `SA = 2πr² (top and bottom circles) + 2πrh (the side) = 2(3.14)(${r * r}) + 2(3.14)(${r})(${h}) = ${fmt(SA)} cm².`); },
+    () => { const s = R(2, 10);
+      return MQ(`What is the surface area of a cube with edges of ${s} ft?`, 6 * s * s + ' ft²', [s ** 3 + ' ft²', 4 * s * s + ' ft²', s * s + ' ft²'], `A cube has 6 identical square faces: 6 × ${s}² = 6 × ${s * s} = ${6 * s * s} ft².`); },
+  );
+}
+</script>
+
+<script>
+// ================= GED Language Arts: new content =================
+{
+  const PASSAGES = [
+    { text: 'Community gardens are popping up in empty city lots across the country. Beyond providing fresh vegetables, these gardens bring neighbors together. A 2019 survey of gardeners in one Midwestern city found that 70 percent had met new friends through their garden. Some cities have also reported fewer complaints about litter and vandalism near the gardens. Still, the gardens face challenges: many rely on volunteers, and landowners can reclaim the lots for construction at any time.',
+      qs: [['What is the main idea of the passage?', 'Community gardens offer social and neighborhood benefits but face challenges.', 'Community gardens grow fresh vegetables.', 'Vandalism is a problem in most cities.', 'Landowners should build on empty lots.'],
+           ['Which detail best supports the idea that gardens bring neighbors together?', 'Seventy percent of surveyed gardeners met new friends through the garden.', 'Gardens are in empty city lots.', 'Many gardens rely on volunteers.', 'Landowners can reclaim the lots.'],
+           ['What can you infer about the future of some community gardens?', 'Some may disappear if the land is sold for construction.', 'They will all grow larger every year.', 'Cities will ban them.', 'They will stop needing volunteers.'],
+           ['What is the purpose of the final sentence?', 'To present a balanced view by noting problems gardens face', 'To persuade readers to plant a garden', 'To entertain with a story', 'To give statistics about vegetables']] },
+    { text: 'Effective immediately, all employees must badge in at the east entrance between 7:00 and 9:00 a.m. The west entrance will be closed for renovations through March 31. Employees arriving after 9:00 a.m. should check in at the front desk. Visitors must be signed in by the employee they are meeting. Questions about this policy can be directed to the Facilities Office at extension 4410.',
+      qs: [['What is the main purpose of this memo?', 'To inform employees about a temporary change in building entry procedures', 'To announce new hiring policies', 'To persuade employees to arrive earlier', 'To describe the renovation design'],
+           ['An employee arrives at 9:30 a.m. on March 10. What should they do?', 'Check in at the front desk', 'Badge in at the west entrance', 'Badge in at the east entrance without checking in', 'Call extension 4410 before entering'],
+           ['Why is the west entrance closed?', 'It is being renovated.', 'It is only for visitors.', 'It is closed after 9:00 a.m.', 'Security is being moved there.'],
+           ['In this memo, "directed" most nearly means:', 'sent', 'ordered', 'filmed', 'pointed at']] },
+    { text: 'In 1955, Rosa Parks refused to give up her seat to a white passenger on a Montgomery, Alabama, bus. Her arrest sparked a boycott of the city\'s buses that lasted 381 days. Black residents, who made up most of the bus riders, walked, carpooled, and organized rides instead. The boycott hurt the bus company financially and drew national attention. In 1956, the U.S. Supreme Court ruled that segregation on public buses was unconstitutional.',
+      qs: [['What is the main idea of the passage?', 'Rosa Parks\'s arrest led to a successful boycott that helped end bus segregation.', 'Rosa Parks lived in Montgomery.', 'Carpooling became popular in 1955.', 'The bus company lost money.'],
+           ['Why did the boycott hurt the bus company financially?', 'Black residents made up most of its riders.', 'The buses were old.', 'The Supreme Court fined it.', 'Gas prices went up.'],
+           ['Which text structure does the passage mainly use?', 'cause and effect in chronological order', 'compare and contrast', 'problem and solution with no dates', 'description of a place'],
+           ['What does the length of the boycott (381 days) suggest about the participants?', 'They were very determined and committed.', 'They did not care about the outcome.', 'The boycott was easy.', 'Most people gave up quickly.']] },
+    { text: 'Sleep is not wasted time. While we rest, the brain sorts and stores memories from the day, and the body repairs muscles and tissues. Teenagers need about eight to ten hours of sleep each night, yet surveys show most get far less. Researchers link too little sleep to lower grades, more car accidents, and a weaker immune system. Simple habits—like keeping a regular bedtime and putting screens away an hour before sleep—can help.',
+      qs: [['Which sentence best states the central idea?', 'Sleep does important work for the brain and body, and many teens don\'t get enough.', 'Teenagers like screens.', 'Car accidents are common.', 'Muscles need repair.'],
+           ['Which is a claim supported with evidence in the passage?', 'Too little sleep is linked to lower grades and more accidents.', 'Everyone should sleep twelve hours.', 'Screens are always harmful.', 'Adults need more sleep than teens.'],
+           ['What is the author\'s purpose?', 'To inform readers about why sleep matters and offer tips', 'To entertain with a bedtime story', 'To sell a sleep product', 'To compare teens and adults'],
+           ['In the first sentence, the author says sleep "is not wasted time" in order to:', 'challenge a common belief before explaining why sleep matters', 'describe a dream', 'give a statistic', 'tell a personal story']] },
+    { text: 'The city council is considering a plan to replace the aging Maple Street bridge. Supporters say the 80-year-old bridge has failed two recent safety inspections and carries 12,000 cars a day. Opponents argue the $14 million cost is too high and suggest repairs costing about $3 million instead. An engineering report estimates that repairs would extend the bridge\'s life by only ten years, while a new bridge would last seventy-five.',
+      qs: [['What is the central issue in the passage?', 'Whether to replace or repair an aging bridge', 'How to reduce traffic on Maple Street', 'Who should pay for city parks', 'Why bridges fail inspections'],
+           ['Which fact would most help supporters of a new bridge?', 'A new bridge would last seventy-five years, but repairs would last only ten.', 'Repairs cost about $3 million.', 'The council is considering a plan.', 'The bridge is on Maple Street.'],
+           ['Based on the engineering report, what can you conclude?', 'Repairs are cheaper now but may lead to more costs sooner.', 'The bridge is perfectly safe.', 'A new bridge would last ten years.', 'Nobody uses the bridge.'],
+           ['How is the passage mainly organized?', 'It presents two sides of a debate, then adds expert evidence.', 'It tells a story in time order.', 'It describes the bridge\'s appearance.', 'It gives step-by-step instructions.']] },
+  ];
+  gedAdd('RLA', 'info',
+    () => { const p = pick(PASSAGES), [q, c, ...w] = pick(p.qs);
+      return MQ(`Read the passage:\n\n${p.text}\n\n${q}`, c, w, `Answer: "${c}" Go back to the passage and find the exact sentences that prove your answer. Wrong choices are often true-sounding details that don't answer THIS question, or ideas the passage never says.`); },
+  );
+
+  const PAIRS = [
+    { a: 'Passage A: Cities should ban gas-powered leaf blowers. A study by the state air board found one hour of use creates as much smog-forming pollution as driving a car 1,100 miles. The machines are also loud enough to damage hearing, according to hearing experts.', b: 'Passage B: Banning leaf blowers is unfair to landscaping workers. My neighbor runs a small business and says electric blowers are too expensive. Everyone I know thinks the ban is a bad idea.', better: 'A', why: 'Passage A uses a state study and expert findings; Passage B relies on one neighbor\'s opinion and a bandwagon claim ("everyone I know").' },
+    { a: 'Passage A: Schools should require four years of math. Most people I talked to at the mall said math helped them, and it just makes sense.', b: 'Passage B: Schools should require four years of math. Labor Department data show that jobs requiring advanced math pay higher median wages, and a national study found students who took more math were more likely to finish college.', better: 'B', why: 'Passage B cites government data and a national study; Passage A uses an informal poll and "it just makes sense," which is not evidence.' },
+    { a: 'Passage A: Public libraries remain essential. Last year our library system recorded 2.3 million visits, and 40 percent of computer users said they had no internet access at home.', b: 'Passage B: Libraries are outdated because everything is online now. Anyone who still goes to a library is living in the past.', better: 'A', why: 'Passage A gives specific usage statistics; Passage B makes a sweeping generalization and insults people who disagree (an attack, not evidence).' },
+    { a: 'Passage A: A four-day school week would help students. It worked great for my cousin\'s school, so it would work everywhere.', b: 'Passage B: A four-day school week has mixed results. A multi-state study found attendance improved slightly, but test scores dropped in some districts, especially for younger students.', better: 'B', why: 'Passage B uses a multi-state study and acknowledges mixed results; Passage A makes a hasty generalization from one school.' },
+  ];
+  gedAdd('RLA', 'argument',
+    () => { const p = pick(PAIRS), ask = pick(['better', 'weak']);
+      return ask === 'better' ? MQ(`${p.a}\n\n${p.b}\n\nWhich passage presents the better-supported argument?`, `Passage ${p.better}`, [`Passage ${p.better === 'A' ? 'B' : 'A'}`, 'Both are equally supported'], `Passage ${p.better} is better supported. ${p.why}`)
+        : MQ(`${p.a}\n\n${p.b}\n\nWhat is the main weakness of Passage ${p.better === 'A' ? 'B' : 'A'}?`, 'It relies on opinions or faulty reasoning instead of credible evidence', ['It uses too many statistics', 'It cites too many experts', 'It is too long'], p.why); },
+    () => { const [s, c, ...w] = pick([
+        ['"Our study of 3,000 drivers found that texting while driving increased reaction time by 35 percent." What type of evidence is this?','statistical data from research','a personal anecdote','an expert opinion without data','an emotional appeal'],
+        ['"When my grandmother lost her home in the flood, she lost every photo of my grandfather." What type of evidence is this?','a personal anecdote meant to create emotion','statistical data','a scientific study','a quotation from an expert'],
+        ['"Dr. Lena Cho, a cardiologist at Mercy Hospital, says daily walking lowers heart disease risk." What type of evidence is this?','expert testimony','a personal anecdote','a hasty generalization','a bandwagon appeal'],
+        ['An author writes, "Some argue the plan costs too much. However, it will save the city money within five years." What is the author doing?','acknowledging and rebutting a counterclaim','changing their claim','agreeing with the opposing side','giving a personal story'],
+        ['Which claim is most likely to be objectively proven or disproven?','The new law reduced traffic deaths by 12 percent last year.','The new law is the best law ever passed.','Everyone should love the new law.','The new law is unfair.'],
+        ['A writer argues for a new park using only data from 1985. What is the biggest problem?','The evidence may be outdated and no longer relevant.','The data is too recent.','Parks never change.','Data is never useful.']]);
+      return MQ(s, c, w, `Answer: ${c}. Strong evidence is relevant, current, and verifiable (data, research, credible experts). Anecdotes and emotional appeals can support a point but are weaker alone.`); },
+  );
+
+  gedAdd('RLA', 'essay',
+    () => { const [prompt, c, ...w] = pick([
+        ['Prompt: Passage A argues cities should add bike lanes (citing injury data); Passage B argues against them (citing complaints from two business owners). Which is the strongest thesis?','Passage A is better supported because it uses injury data, while Passage B relies on a few business owners\' complaints.','I love riding my bike, so bike lanes are great.','Bike lanes are a topic many people talk about.','Both passages have good and bad points about bikes.'],
+        ['Prompt: Two passages debate raising the minimum driving age to 18. Which thesis best fits the GED essay task?','Passage B presents the stronger argument because it uses crash statistics and a safety study, while Passage A relies mostly on personal stories.','I think 16-year-olds should drive.','Driving is an important part of American life.','This essay will talk about driving.'],
+        ['Prompt: Passages disagree about whether schools should serve only healthy snacks. Which thesis is strongest?','Passage A makes the better case because its nutrition research directly supports its claim, while Passage B\'s argument depends on what students "like."','Healthy snacks are good and junk food is bad.','Snacks are eaten by many students every day.','There are two passages about snacks.']]);
+      return MQ(`${prompt}`, c, w, `The GED essay asks which argument is BETTER SUPPORTED — not your personal opinion. A strong thesis names one passage and previews WHY (the quality of its evidence).`); },
+    () => { const [q, c, ...w] = pick([
+        ['On the GED essay, what are you mainly asked to do?','Explain which of two arguments is better supported, using evidence from the passages','Give your personal opinion on the topic','Summarize both passages without taking a side','Write a story related to the topic'],
+        ['How long do you have for the GED essay?','45 minutes','15 minutes','2 hours','There is no time limit'],
+        ['Which is the best way to organize the essay?','Introduction with thesis → body paragraphs with evidence → conclusion','One long paragraph','A list of quotes','Only a conclusion'],
+        ['What should each body paragraph focus on?','One reason the argument is stronger, with evidence from the text and explanation','Several unrelated ideas','Your own experiences only','Repeating the thesis word for word'],
+        ['Why should you mention evidence from BOTH passages?','To compare their support and show why one is stronger','To make the essay longer','Because the rules say to agree with both','It is not necessary'],
+        ['Which is the best use of the first few minutes?','Read both passages, note each claim and its evidence, and plan your thesis','Start writing immediately','Count the words in each passage','Write the conclusion first'],
+        ['What is a good final step if you have time left?','Reread and fix errors in grammar, spelling, and punctuation','Add a new topic','Delete your introduction','Change your thesis to the other passage'],
+        ['Which of these is NOT one of the traits the essay is scored on?','Using fancy vocabulary','Creating an argument with text-based evidence','Clear organization and development','Command of standard English conventions']]);
+      return MQ(q, c, w, `Answer: ${c}. The essay is scored on (1) building an argument with evidence from the texts, (2) clear organization and development, and (3) clear, correct writing.`); },
+    () => { const [claim, c, ...w] = pick([
+        ['Thesis: "Passage A is better supported because it relies on research."','"Passage A cites a 10-year university study showing a 20% drop in injuries."','"Passage A is really convincing."','"I agree with Passage A."','"Passage B is kind of long."'],
+        ['Thesis: "Passage B is stronger because its evidence is more current."','"Passage B uses 2024 census data, while Passage A\'s numbers are from 1998."','"Passage B has more paragraphs."','"Passage B sounds more serious."','"Everyone would pick Passage B."'],
+        ['Thesis: "Passage A is weaker because it relies on emotional appeals."','"Passage A describes one sad story but gives no data about how common the problem is."','"Passage A is sad."','"I didn\'t like Passage A."','"Passage A uses the word \'important\' twice."']]);
+      return MQ(`${claim}\nWhich sentence gives the best supporting evidence for this thesis?`, c, w, `Best: ${c} Good support points to SPECIFIC details in the passage and connects them to your thesis. Vague praise or personal opinions don't count as evidence.`); },
+    () => { const [a, b, c, ...w] = pick([
+        ['Passage A cites three studies.', 'Passage B offers only one example.', 'In contrast,', 'For example,', 'Similarly,', 'As a result,'],
+        ['Passage B uses outdated statistics.', 'its conclusions may no longer be accurate.', 'As a result,', 'In contrast,', 'For instance,', 'Meanwhile,'],
+        ['Passage A relies on expert testimony.', 'it quotes a nurse with twenty years of experience.', 'For example,', 'However,', 'In conclusion,', 'On the other hand,'],
+        ['Passage B admits the plan has costs.', 'it argues the long-term savings are greater.', 'However,', 'For example,', 'Therefore,', 'In addition,']]);
+      return MQ(`Which transition best connects these sentences?\n"${a} ___ ${b}"`, c, w, `"${c}" fits. Contrast: however, in contrast. Example: for example, for instance. Result: as a result, therefore. Adding: in addition, also.`); },
+  );
+
+  gedAdd('RLA', 'grammar',
+    () => { const [s, c, ...w] = pick([
+        ['On weekends, I like hiking, swimming, and ___.','biking','to bike','I bike','going to bike'],
+        ['The new manager is organized, friendly, and ___.','knowledgeable','has a lot of knowledge','she knows a lot','with knowledge'],
+        ['To apply, you must fill out the form, attach a résumé, and ___ it by Friday.','submit','submitting','you submit','to be submitting'],
+        ['The job requires lifting boxes, answering phones, and ___.','greeting customers','to greet customers','customers are greeted','you greet customers']]);
+      return MQ(`Choose the option that keeps the sentence parallel:\n"${s}"`, c, w, `"${c}" keeps parallel structure — items in a list should use the same grammatical form (all -ing words, all adjectives, or all verbs).`); },
+    () => { const [c, ...w] = pick([
+        ['We need to decide by Friday.','We need to make a decision about it by the end of the day on Friday.','We need to decide, and make a choice, by Friday.','By Friday, a decision needs to be made by us about deciding.'],
+        ['The meeting starts at 9:00 a.m.','The meeting starts at 9:00 a.m. in the morning.','At the time of 9:00 a.m., the meeting will be starting.','The meeting, which is a meeting, starts at 9:00 a.m.'],
+        ['Please reply soon.','Please reply back to me as soon as you possibly can at your earliest convenience.','Reply back soon, please, if possible.','Please, at your earliest convenience, soon reply back.'],
+        ['The results were surprising.','The results were surprising and unexpected.','The end results were surprising results.','In my personal opinion, I think the results were surprising.']]);
+      return MQ('Which sentence is the clearest and least wordy?', c, w, `"${c}" says the same thing without repeated or unnecessary words. GED editing questions reward concise sentences — cut redundancy like "9 a.m. in the morning" or "reply back."`); },
+    () => { const [c, ...w] = pick([
+        ['When Maria called Jen, Maria was upset.','When Maria called Jen, she was upset.','Maria called Jen when she was upset with her.','She was upset when Maria called Jen.'],
+        ['The manager told Carlos that Carlos would get a raise.','The manager told Carlos that he would get a raise.','He told Carlos that he would get a raise.','The manager told him that he would get a raise.'],
+        ['After the dog chased the cat, the dog fell asleep.','After the dog chased the cat, it fell asleep.','It fell asleep after the dog chased the cat.','The dog chased the cat, and then it fell asleep on it.']]);
+      return MQ('Which sentence avoids an unclear pronoun?', c, w, `"${c}" makes it clear who is who. If "he," "she," or "it" could refer to two different people or things, replace the pronoun with the noun.`); },
+  );
+  gedAdd('RLA', 'mechanics',
+    () => { const [s, c, ...w] = pick([
+        ['The store opens at 8:00 a.m. [ however / ; however, / , however ] it closes early on Sundays.', '; however,', 'however', ', however'],
+        ['Please bring the following items [ : / ; / , ] a pen, a photo ID, and your confirmation number.', ':', ';', ','],
+        ['My supervisor [ , who has worked here for twenty years, / who has worked here for twenty years / , who has worked here for twenty years ] is retiring.', ', who has worked here for twenty years,', 'who has worked here for twenty years', ', who has worked here for twenty years'],
+        ['We finished the project early [ , so / so / ; so, ] we celebrated with pizza.', ', so', 'so', '; so,'],
+        ['The [ employees\' / employee\'s / employees ] lounge is shared by the whole staff.', 'employees\'', 'employee\'s', 'employees'],
+        ['Although the train was late [ , / ; / : ] we still made the meeting.', ',', ';', ':']]);
+      return MQ(`Choose the correct punctuation to fill the brackets:\n"${s}"`, c, w, `"${c}" is correct. Before words like "however" joining two sentences, use a semicolon and a comma. Colons introduce lists. Nonessential "who" clauses get commas on both sides. Use a comma before "so" joining two sentences and after an introductory clause. A lounge shared by all employees is the employees' lounge.`); },
+  );
+}
+</script>
+
+<script>
+// ================= GED Science: new content =================
+gedAdd('Science', 'body',
+  both([['carbohydrates','the body\'s main source of quick energy'],['proteins','build and repair muscles and tissues'],['fats (lipids)','store energy and help absorb some vitamins'],['fiber','helps digestion move smoothly'],['calcium','builds strong bones and teeth'],['iron','helps red blood cells carry oxygen'],['vitamin C','supports the immune system and helps heal wounds'],['vitamin D','helps the body absorb calcium'],['water','carries nutrients and helps control body temperature']],
+    ([n, j]) => ({ q: `What is the main job of ${n} in the diet?`, explain: `${cap(n)}: ${j}.` }), ([j, n]) => ({ q: `Which nutrient ${j}?`, explain: `${cap(n)}: ${j}. A balanced diet includes all of these.` })),
+  () => whichGroup({ bacteria: ['strep throat','tuberculosis','food poisoning from salmonella','Lyme disease'], virus: ['the flu','the common cold','COVID-19','chickenpox','measles'], fungus: ['athlete\'s foot','ringworm'], 'parasite (protist)': ['malaria','giardia'] },
+    (label, d) => ({ q: `What type of pathogen causes ${d}?`, explain: `${cap(d)} is caused by a ${label}. Antibiotics work against bacteria but NOT viruses; vaccines help the immune system prepare for specific pathogens.` })),
+  () => { const [q, c, ...w] = pick([
+      ['How does a vaccine protect you?','It trains the immune system to recognize a pathogen before a real infection','It kills all bacteria in the body','It replaces white blood cells','It works as an antibiotic'],
+      ['Why don\'t antibiotics cure the flu?','The flu is caused by a virus, and antibiotics only work on bacteria','The flu is too mild','Antibiotics make the flu worse','The flu is caused by a fungus'],
+      ['You get hot and start sweating. What is your body doing?','maintaining homeostasis by cooling down','fighting an infection','digesting food','building muscle'],
+      ['Which is a noninfectious disease (it cannot spread from person to person)?','type 2 diabetes','the flu','strep throat','chickenpox'],
+      ['What is the main role of white blood cells?','fighting infections','carrying oxygen','clotting blood','digesting food'],
+      ['Which lifestyle choice most lowers the risk of heart disease?','regular exercise and a balanced diet','eating more salt','sleeping less','smoking'],
+      ['Insulin, which controls blood sugar, is made by which organ?','the pancreas','the liver','the heart','the lungs'],
+      ['What happens when you shiver in the cold?','Muscles contract quickly to produce heat','Your body is losing heat on purpose','Your blood stops flowing','You are sweating']]);
+    return MQ(q, c, w, `Answer: ${c}. Homeostasis keeps the body's internal conditions stable. The immune system defends against pathogens, and healthy habits reduce the risk of chronic disease.`); },
+);
+gedAdd('Science', 'practices',
+  () => { const [s, c, ...w] = pick([
+      ['A study finds that people who carry lighters are more likely to get lung cancer. What is the best explanation?','A third factor — smoking — causes both','Lighters cause cancer','Cancer causes people to buy lighters','The results must be fake'],
+      ['Cities with more firefighters have more fires. Should cities fire firefighters to reduce fires?','No — bigger cities have both more fires and more firefighters; it\'s correlation, not causation','Yes, firefighters cause fires','Yes, fewer firefighters means fewer fires','The data proves nothing about anything'],
+      ['Students who eat breakfast have higher grades. Which conclusion is best supported?','Breakfast and grades are related, but other factors may explain the link','Breakfast definitely causes higher grades','Higher grades cause breakfast','Breakfast lowers grades'],
+      ['Ice cream sales and drowning rates both rise in July. What most likely explains this?','Hot weather increases both swimming and ice cream eating','Ice cream causes drowning','Drowning causes ice cream sales','It is a coincidence with no cause']]);
+    return MQ(s, c, w, `Correlation means two things change together; causation means one actually causes the other. Look for a hidden third variable before concluding cause and effect.`); },
+  () => { const [s, c, ...w] = pick([
+      ['Scientists test a new fertilizer. Group 1 gets fertilizer; Group 2 gets none. What is Group 2?','the control group','the experimental group','the independent variable','the hypothesis'],
+      ['Why should an experiment include many test subjects instead of just one?','to make results more reliable and reduce the effect of chance','to make it cost more','to finish faster','because one subject is always wrong'],
+      ['Why do scientists repeat experiments?','to check that results are consistent and reliable','to change the hypothesis each time','to get the answer they want','because the first results are always wrong'],
+      ['A medicine trial gives some patients a sugar pill without telling them. What is the sugar pill called?','a placebo','a hypothesis','a variable','a conclusion'],
+      ['A student tests three brands of batteries but uses a different flashlight for each. What is the flaw?','More than one variable changed, so the test isn\'t fair','There are too many batteries','She should test only one brand','Nothing — it\'s a good design'],
+      ['Which is a testable hypothesis?','If plants get more light, then they will grow taller.','Plants are beautiful.','Plants are better than animals.','Everyone should have plants.']]);
+    return MQ(s, c, w, `Answer: ${c}. A fair experiment changes ONE independent variable, keeps everything else controlled, compares against a control group, and uses repeated trials.`); },
+  () => { const start = R(10, 30), rate = pick([2, 3, 4, 5]), mins = [0, 2, 4, 6, 8], vals = mins.map(m => start + rate * m / 2), ask = pick(['rate', 'predict', 'value']);
+    const table = `Water temperature while heating — ${mins.map((m, i) => `${m} min: ${vals[i]}°C`).join(', ')}`;
+    if (ask === 'rate') return MQ(`${table}\nHow fast does the temperature rise?`, `${rate / 2}°C per minute`, [`${rate}°C per minute`, `${vals[4]}°C per minute`, `${fmt(vals[4] / 8)}°C per minute`], `Change in temperature ÷ change in time = (${vals[4]} − ${vals[0]}) ÷ 8 = ${rate / 2}°C per minute.`);
+    if (ask === 'predict') return MQ(`${table}\nIf the pattern continues, what will the temperature be at 12 minutes?`, `${start + rate * 6}°C`, [`${vals[4] + rate / 2}°C`, `${vals[4] * 1.5}°C`, `${start + 12}°C`], `The temperature rises ${rate} degrees every 2 minutes. From 8 to 12 minutes is 2 more steps: ${vals[4]} + ${rate} + ${rate} = ${start + rate * 6}°C.`);
+    return MQ(`${table}\nWhat was the temperature at 6 minutes?`, `${vals[3]}°C`, [`${vals[2]}°C`, `${vals[4]}°C`, `${vals[3] + 6}°C`], `Find 6 min in the data: ${vals[3]}°C.`); },
+);
+
+// ================= GED Social Studies: new content =================
+gedAdd('Social Studies', 'modern',
+  both([['the Progressive Era','a reform movement (about 1890–1920) against corruption, child labor, and unsafe working conditions'],['World War I','a global war (1914–1918); the U.S. joined in 1917'],['the Roaring Twenties','a decade of economic boom, jazz, and new consumer goods'],['the Great Depression','a severe economic collapse that began with the 1929 stock market crash'],['the New Deal','President Franklin D. Roosevelt\'s programs to fight the Great Depression, including Social Security'],['World War II','a global war (1939–1945); the U.S. entered after Pearl Harbor'],['the Holocaust','Nazi Germany\'s murder of six million Jews and millions of others'],['the Cold War','a decades-long rivalry between the U.S. and the Soviet Union without direct full-scale war'],['the Marshall Plan','U.S. aid to rebuild Western Europe after World War II'],['the Cuban Missile Crisis','a 1962 standoff over Soviet nuclear missiles in Cuba'],['the Civil Rights Movement','the 1950s–60s struggle to end segregation and win equal rights for African Americans'],['the Vietnam War','a long, divisive war in Southeast Asia that sparked large protests in the U.S.'],['Watergate','a 1970s political scandal that led President Nixon to resign'],['the September 11 attacks','terrorist attacks in 2001 that led to the War on Terror']],
+    ([e, d]) => ({ q: `What was ${e}?`, explain: `${cap(e)}: ${d}.` }), ([d, e]) => ({ q: `Which event or era was ${d}?`, explain: `${cap(e)}: ${d}.` })),
+  both([['led the U.S. through the Great Depression and most of World War II','Franklin D. Roosevelt'],['was a Progressive president known for breaking up monopolies and creating national parks','Theodore Roosevelt'],['led the Montgomery Bus Boycott and gave the "I Have a Dream" speech','Martin Luther King Jr.'],['refused to give up her bus seat in Montgomery in 1955','Rosa Parks'],['was the first African American Supreme Court justice and argued Brown v. Board of Education','Thurgood Marshall'],['decided to use atomic bombs on Japan to end World War II','Harry Truman'],['was president during the Cuban Missile Crisis','John F. Kennedy'],['signed the Civil Rights Act of 1964','Lyndon B. Johnson'],['called the Soviet Union an "evil empire" and urged "tear down this wall"','Ronald Reagan'],['organized farmworkers and co-founded the United Farm Workers','César Chávez'],['led the fight for women\'s suffrage in the early 1900s','Alice Paul'],['was the first African American U.S. president','Barack Obama']],
+    ([d, p]) => ({ q: `Who ${d}?`, explain: `${p} ${d}.` }), ([p, d]) => ({ q: `What is ${p} known for?`, explain: `${p} ${d}.` })),
+  () => { const EV = [[1917,'the U.S. enters World War I'],[1920,'the 19th Amendment gives women the vote'],[1929,'the stock market crashes'],[1933,'the New Deal begins'],[1941,'Japan attacks Pearl Harbor'],[1945,'World War II ends'],[1954,'Brown v. Board of Education'],[1955,'the Montgomery Bus Boycott begins'],[1962,'the Cuban Missile Crisis'],[1963,'the March on Washington'],[1964,'the Civil Rights Act is signed'],[1969,'astronauts land on the Moon'],[1974,'President Nixon resigns'],[1989,'the Berlin Wall falls'],[1991,'the Soviet Union collapses'],[2001,'the September 11 attacks']];
+    let a, b; do { a = pick(EV); b = pick(EV); } while (a[0] === b[0]); const [f, l] = a[0] < b[0] ? [a, b] : [b, a];
+    return MQ(`Which came first: ${a[1]}, or ${b[1]}?`, cap(f[1]), [cap(l[1])], `${cap(f[1])} (${f[0]}) came before ${l[1]} (${l[0]}).`); },
+  () => { const [q, c, ...w] = pick([
+      ['What was a major cause of the Great Depression?','the 1929 stock market crash and widespread bank failures','World War II','the Civil War','the invention of the car'],
+      ['What did the Supreme Court decide in Brown v. Board of Education (1954)?','Racial segregation in public schools is unconstitutional','Women have the right to vote','Separate but equal is acceptable','Schools must teach civics'],
+      ['What did the Voting Rights Act of 1965 do?','banned practices like literacy tests used to keep African Americans from voting','lowered the voting age to 18','gave women the right to vote','created the Electoral College'],
+      ['What was the purpose of NATO, formed in 1949?','a military alliance of Western nations against the Soviet threat','a trade deal with China','a group of Soviet allies','a world peace organization that replaced the UN'],
+      ['What was the "containment" policy during the Cold War?','stopping the spread of communism','building walls around cities','limiting nuclear power plants','reducing immigration'],
+      ['Which program created during the New Deal still provides retirement income today?','Social Security','Medicare','the Marshall Plan','the GI Bill'],
+      ['Why did many African Americans move north during the Great Migration (about 1916–1970)?','to escape segregation and find factory jobs','to farm cotton','to join the army only','because the South banned them from leaving'],
+      ['What was the "Space Race"?','Cold War competition between the U.S. and USSR to achieve space milestones','a car race','a race to build skyscrapers','a competition to explore the ocean']]);
+    return MQ(q, c, w, `Answer: ${c}.`); },
+);
+gedAdd('Social Studies', 'economics',
+  both([['gross domestic product (GDP)','the total value of all goods and services a country produces in a year'],['inflation','a general rise in prices that lowers the buying power of money'],['recession','a significant decline in economic activity lasting months'],['unemployment rate','the percent of the labor force that wants work but can\'t find a job'],['the Federal Reserve','the central bank of the U.S. that manages the money supply and interest rates'],['fiscal policy','government decisions about taxes and spending'],['monetary policy','the Federal Reserve\'s actions on interest rates and the money supply'],['interest rate','the cost of borrowing money, shown as a percent'],['tariff','a tax on imported goods'],['trade deficit','when a country imports more than it exports'],['stock','a share of ownership in a company'],['credit score','a number showing how reliably a person repays debts'],['progressive tax','a tax that takes a larger percentage from higher incomes'],['capitalism','an economic system where individuals and businesses own property and make most decisions']],
+    ([t, d]) => ({ q: `What is ${t}?`, explain: `${cap(t)}: ${d}.` }), ([d, t]) => ({ q: `Which economic term means ${d}?`, explain: `That's ${t}.` })),
+  () => { const [s, c, ...w] = pick([
+      ['Inflation is rising fast. What is the Federal Reserve most likely to do?','raise interest rates','lower interest rates','print extra money','cut taxes'],
+      ['The economy is in a recession. What might the government do as fiscal policy?','increase spending or cut taxes to boost demand','raise taxes sharply','stop all spending','raise interest rates'],
+      ['What usually happens to borrowing when interest rates rise?','People and businesses borrow less','People borrow more','Borrowing is not affected','Banks stop lending forever'],
+      ['A country places a high tariff on imported cars. What will likely happen?','Imported cars become more expensive for buyers','Imported cars become cheaper','Domestic car prices fall to zero','Nothing changes'],
+      ['If you only pay the minimum on a credit card each month, what happens?','You pay much more in interest over time','The debt disappears','Your credit score always rises','You pay no interest'],
+      ['Why is saving in a diversified set of investments less risky than one stock?','A loss in one investment can be balanced by others','It guarantees a profit','Diversified investments never lose value','One stock is illegal to own']]);
+    return MQ(s, c, w, `Answer: ${c}.`); },
+);
+gedAdd('Social Studies', 'civics',
+  both([['Marbury v. Madison (1803)','established judicial review — courts can strike down unconstitutional laws'],['Brown v. Board of Education (1954)','ended legal segregation in public schools'],['Miranda v. Arizona (1966)','requires police to tell suspects their rights, like the right to remain silent'],['Gideon v. Wainwright (1963)','guarantees a lawyer for criminal defendants who can\'t afford one'],['Tinker v. Des Moines (1969)','protected students\' right to peaceful symbolic speech at school'],['Plessy v. Ferguson (1896)','allowed "separate but equal" segregation (later overturned)']],
+    ([c, d]) => ({ q: `What did the Supreme Court case ${c} do?`, explain: `${c}: ${d}.` }), ([d, c]) => ({ q: `Which Supreme Court case ${d}?`, explain: `${c}: ${d}.` })),
+  () => { const [q, c, ...w] = pick([
+      ['How is the U.S. President officially elected?','by the Electoral College, based on each state\'s votes','by Congress','by the Supreme Court','by a simple national popular vote only'],
+      ['How many electoral votes does a candidate need to win the presidency?','270','218','300','51'],
+      ['What is a primary election?','an election where voters choose a party\'s candidate','the final general election','an election for judges only','a vote held every 10 years'],
+      ['How can the Constitution be amended?','Two-thirds of Congress proposes, then three-fourths of the states ratify','The President signs an order','The Supreme Court votes','A simple majority of voters decides'],
+      ['What does "due process" mean?','the government must follow fair legal procedures before taking away life, liberty, or property','police can arrest anyone','trials must be fast','laws must be approved by the President'],
+      ['What is the role of the Cabinet?','to advise the President and lead executive departments','to write laws','to judge court cases','to count electoral votes'],
+      ['Who becomes President if the President cannot serve?','the Vice President','the Speaker of the House','the Chief Justice','the Secretary of State'],
+      ['What is a filibuster?','a long speech in the Senate used to delay a vote','a presidential veto','a type of court case','a campaign advertisement'],
+      ['Why does the U.S. hold a census every 10 years?','to count the population so House seats can be divided among states','to choose the President','to collect taxes','to pick Supreme Court justices'],
+      ['What is the main difference between a direct democracy and a representative democracy?','In a direct democracy citizens vote on laws themselves; in a representative democracy they elect officials to decide','There is no difference','A representative democracy has a king','A direct democracy has no voting']]);
+    return MQ(q, c, w, `Answer: ${c}.`); },
+);
+gedAdd('Social Studies', 'world',
+  () => whichGroup({ 'push factor': ['war in the home country','lack of jobs','drought and crop failure','political persecution','natural disasters'], 'pull factor': ['job opportunities abroad','religious freedom','better schools','family already living in the new country','a safer environment'] },
+    (label, item) => ({ q: `Is ${item} a push factor or a pull factor for migration?`, explain: `${cap(item)} is a ${label}. Push factors drive people AWAY from a place; pull factors ATTRACT people to a new place.` })),
+  () => { const [s, c, ...w] = pick([
+      ['Farmers cut terraces into steep hillsides to grow rice. This is an example of:','humans modifying the environment','the environment having no effect on people','migration','urbanization'],
+      ['People in cold regions build homes with thick walls and small windows. This shows:','people adapting to their environment','globalization','a push factor','deforestation'],
+      ['Clearing large areas of rainforest for cattle ranching can lead to:','habitat loss and increased carbon dioxide','more rainforest growth','cooler global temperatures','fewer greenhouse gases'],
+      ['Many people moving from rural areas to cities is called:','urbanization','globalization','deforestation','immigration'],
+      ['A company makes phones with parts from five countries and sells them worldwide. This is an example of:','globalization','isolationism','a command economy','feudalism'],
+      ['Why are many major cities located on rivers or coasts?','Water provides transportation, trade, and resources','Rivers prevent all flooding','Coasts are always cooler','Land is cheaper there']]);
+    return MQ(s, c, w, `Answer: ${c}. Geography questions often ask how people depend on, adapt to, and change their environment.`); },
+);
+</script>
+
 <!--BANKS-->
 
 <script>
@@ -2302,70 +2807,87 @@ document.addEventListener('pointerdown', e => {
 });
 
 // ---------- engine ----------
-const SUBJECTS = ['Math', 'English', 'Science', 'Social Studies'];
-const PER_SUBJECT = 25, TEST_LEN = PER_SUBJECT * SUBJECTS.length, PASS = 80, MAX_MISSES = TEST_LEN - PASS;
-const MAX_FIXED = 8;   // at most this many hand-written questions per subject; the rest are generated fresh
-const GRADES = Object.keys(BANK).map(Number).sort((a, b) => a - b);
-const ord = g => g + (g === 1 ? 'st' : g === 2 ? 'nd' : g === 3 ? 'rd' : 'th');
+const SUBJECTS = Object.keys(GED);
+const TEST_LEN = 50, PASS = 33, MAX_MISSES = TEST_LEN - PASS;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const app = document.getElementById('app');
+// Questions with a reading passage (separated by a blank line) show the passage in its own readable box.
+function qHtml(text){
+  const cut = text.lastIndexOf('\n\n');
+  return cut < 0 ? `<div class="q">${esc(text)}</div>` : `<div class="passage">${esc(text.slice(0, cut))}</div><div class="q">${esc(text.slice(cut + 2))}</div>`;
+}
 
-const KEY = 'gradecheck.v1';
-// topics: "grade|subject|topicId" → { miss: test misses, right / tries: practice results }
-const fresh = () => ({ certified: [], best: {}, seen: [], current: null, topics: {} });
+const KEY = 'gradecheck.ged.v1';
+// passed: subjects passed · best: best estimated score per passed subject · topics: "subject|topicId" → { miss, right, tries }
+const fresh = () => ({ passed: [], best: {}, seen: [], current: null, topics: {} });
 function load(){ try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return fresh(); } }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch {} }
 let progress = load();
-const unlocked = g => g === GRADES[0] || progress.certified.includes(GRADES[GRADES.indexOf(g) - 1]);
 
-// Every question you've been asked (oldest first), so new tests avoid repeats.
-// A question is identified by its wording + answer, since one template can ask about many different answers.
+const findTopic = (s, id) => GED[s].topics.find(t => t.id === id);
+const topicKey = (s, id) => `${s}|${id}`;
+const tstat = k => progress.topics[k] || (progress.topics[k] = { miss: 0, right: 0, tries: 0 });
+const allItems = s => GED[s].topics.flatMap(t => t.items);
+
+// Rough, unofficial GED-style score (100–200). 65% correct maps to 145, the passing score on each real GED test.
+function estScore(right, total){
+  const p = right / total;
+  return Math.round(p >= 0.65 ? 145 + (p - 0.65) / 0.35 * 55 : 100 + p / 0.65 * 45);
+}
+const band = sc => sc >= 175 ? 'College Ready + Credit range' : sc >= 165 ? 'College Ready range' : sc >= 145 ? 'Passing range' : 'Below passing';
+
+// Every question you've been asked (oldest first), keyed by wording + answer, so new tests avoid repeats.
 const RECENT = 3 * TEST_LEN;
 function markSeen(qs){
   const keys = qs.map(q => q.key);
   progress.seen = [...progress.seen.filter(k => !keys.includes(k)), ...keys].slice(-4000);
 }
 
-function buildTest(grade){
+function makeQ(t, it){
+  const q = typeof it === 'function' ? it() : MQ(it[0], it[1], shuffle(it[2]), it[3]);
+  q.key = q.q + '|' + q.answer; q.topic = t.id; q.topicName = t.name;
+  return q;
+}
+
+// A practice test samples each topic in proportion to its weight on the real GED.
+function buildTest(s){
   const ever = new Set(progress.seen), recent = new Set(progress.seen.slice(-RECENT)), used = new Set(), qs = [];
-  // freshness: 0 = never seen, 1 = seen but not in the last few tests, 2 = seen recently
-  const age = k => !ever.has(k) ? 0 : !recent.has(k) ? 1 : 2;
-  const add = (subject, q) => { used.add(q.key); qs.push({ subject, ...q }); };
-  for (const subj of SUBJECTS){
-    const items = BANK[grade][subj];
-    const gens = shuffle(items.filter(x => typeof x === 'function'));
-    const fixed = shuffle(items.filter(x => typeof x !== 'function')).map(f => ({ f, key: f[0] + '|' + f[1] }))
-      .sort((a, b) => age(a.key) - age(b.key));
-    const fixedQ = ({ f, key }) => ({ ...MQ(f[0], f[1], shuffle(f[2]), f[3]), key, topic: f.topic });
+  const age = k => !ever.has(k) ? 0 : !recent.has(k) ? 1 : 2;   // 0 never seen · 1 not recently · 2 recently
+  const topics = GED[s].topics, totalW = topics.reduce((n, t) => n + t.w, 0);
+  const raw = topics.map(t => TEST_LEN * t.w / totalW), counts = raw.map(Math.floor);
+  raw.map((r, i) => [r - counts[i], i]).sort((a, b) => b[0] - a[0])
+    .slice(0, TEST_LEN - counts.reduce((a, b) => a + b, 0)).forEach(([, i]) => counts[i]++);
+  const take = q => { used.add(q.key); qs.push(q); };
+  const fill = (t, want) => {
     let n = 0;
-    // A few hand-written questions (freshest first)...
-    for (const f of fixed.slice(0, gens.length ? MAX_FIXED : PER_SUBJECT)) if (age(f.key) === 0 || !gens.length){ add(subj, fixedQ(f)); n++; }
-    // ...then generated questions, round-robin across generators. Accept never-seen first, then not-recent, then anything new to this test.
-    for (let g = 0, tries = 0; n < PER_SUBJECT && gens.length && tries < 900; g++, tries++){
-      const gen = gens[g % gens.length], q = gen();
-      q.key = q.q + '|' + q.answer; q.topic = gen.topic;
-      if (used.has(q.key) || age(q.key) > (tries < 300 ? 0 : tries < 600 ? 1 : 2)) continue;
-      add(subj, q); n++;
+    const gens = shuffle(t.items.filter(x => typeof x === 'function'));
+    const fixed = shuffle(t.items.filter(x => typeof x !== 'function')).sort((a, b) => age(a[0] + '|' + a[1]) - age(b[0] + '|' + b[1]));
+    for (const f of fixed){ if (n >= Math.ceil(want / 3)) break; if (!used.has(f[0] + '|' + f[1]) && age(f[0] + '|' + f[1]) === 0){ take(makeQ(t, f)); n++; } }
+    for (let g = 0, tries = 0; n < want && gens.length && tries < 600; g++, tries++){
+      const q = makeQ(t, gens[g % gens.length]);
+      if (used.has(q.key) || age(q.key) > (tries < 200 ? 0 : tries < 400 ? 1 : 2)) continue;
+      take(q); n++;
     }
-    for (const f of fixed){ if (n >= PER_SUBJECT) break; if (!used.has(f.key)){ add(subj, fixedQ(f)); n++; } }
-  }
+    for (const f of fixed){ if (n >= want) break; if (!used.has(f[0] + '|' + f[1])){ take(makeQ(t, f)); n++; } }
+    return n;
+  };
+  let short = 0;
+  topics.forEach((t, i) => { short += counts[i] - fill(t, counts[i]); });
+  for (let round = 0; short > 0 && round < 5; round++) for (const t of shuffle(topics)){ if (short <= 0) break; short -= fill(t, 1); }
   return shuffle(qs);
 }
 
-let test = null, prac = null, practiceGrade = GRADES[0];
+let test = null, prac = null;
 
-const findTopic = (g, s, id) => LESSONS[g][s].find(t => t.id === id);
-const topicKey = (g, s, id) => `${g}|${s}|${id}`;
-const tstat = k => progress.topics[k] || (progress.topics[k] = { miss: 0, right: 0, tries: 0 });
 // A topic is a weak spot while its test misses outweigh practice (every 2 correct practice answers cancel 1 miss).
 function weakSpots(){
   return Object.entries(progress.topics)
-    .map(([k, st]) => { const [g, s, id] = k.split('|'); return { g: +g, s, id, st, score: st.miss - st.right / 2 }; })
-    .filter(w => w.score > 0 && LESSONS[w.g]?.[w.s] && findTopic(w.g, w.s, w.id))
+    .map(([k, st]) => { const [s, id] = k.split('|'); return { s, id, st, score: st.miss - st.right / 2 }; })
+    .filter(w => w.score > 0 && GED[w.s] && findTopic(w.s, w.id))
     .sort((a, b) => b.score - a.score);
 }
-const resumeCard = () => progress.current ? `<div class="card grade ready"><div class="num">▶</div>
-    <div class="info"><h3>Test in progress</h3><small>${ord(progress.current.grade)} grade · question ${progress.current.i + 1} of ${TEST_LEN} · ${progress.current.misses.length} missed</small></div>
+const resumeCard = () => progress.current && GED[progress.current.subject] ? `<div class="card grade ready"><div class="num">▶</div>
+    <div class="info"><h3>Test in progress</h3><small>${GED[progress.current.subject].name} · question ${progress.current.i + 1} of ${TEST_LEN} · ${progress.current.misses.length} missed</small></div>
     <button class="primary" id="resume">Resume</button></div>` : '';
 function bindCommon(back){
   const r = document.getElementById('resume');
@@ -2377,180 +2899,58 @@ function bindCommon(back){
 
 function home(){
   test = null; prac = null;
-  const top = GRADES.filter(g => progress.certified.includes(g)).pop(), weak = weakSpots().length;
+  const passed = SUBJECTS.filter(s => progress.passed.includes(s)).length, weak = weakSpots().length;
   app.innerHTML = `
     <header class="board">
-      <h1>Grade Check</h1>
-      <p>${top ? `You're certified through <b>${ord(top)} grade</b>.` : `Prove what you know, one grade at a time.`}</p>
+      <h1>GED Prep</h1>
+      <p>${passed === SUBJECTS.length ? '🎓 You passed all four practice tests — you\'re ready to schedule the real GED!'
+        : passed ? `You've passed <b>${passed} of ${SUBJECTS.length}</b> GED practice tests.` : 'Learn and practice everything on the four GED tests.'}</p>
     </header>
     ${resumeCard()}
     <div class="modes">
-      <button class="mode" id="go-test"><div class="icon">📝</div><h2>Take a Test</h2>
-        <p>${TEST_LEN} random questions across ${SUBJECTS.length} subjects. Score ${PASS} to certify a grade and unlock the next one.</p></button>
+      <button class="mode" id="go-test"><div class="icon">📝</div><h2>Take a Practice Test</h2>
+        <p>A ${TEST_LEN}-question test for each GED subject with an estimated score. Get ${PASS}+ right (about 145) to pass.</p></button>
       <button class="mode" id="go-practice"><div class="icon">📚</div><h2>Practice &amp; Learn</h2>
-        <p>${weak ? `<b class="warn">${weak} weak spot${weak > 1 ? 's' : ''} to review.</b> ` : ''}Pick any topic, read a quick lesson, and practice with instant feedback.</p></button>
-    </div>`;
+        <p>${weak ? `<b class="warn">${weak} weak spot${weak > 1 ? 's' : ''} to review.</b> ` : ''}Every GED topic, with a quick lesson and unlimited practice.</p></button>
+    </div>
+    <div class="subject-strip">${SUBJECTS.map(s => `<span class="${progress.passed.includes(s) ? 'done' : ''}">${GED[s].icon} ${GED[s].name}${progress.passed.includes(s) ? ' ✓' : ''}</span>`).join('')}</div>
+    <p class="disclaimer">Unofficial study tool — not affiliated with GED Testing Service. Scores are rough estimates, not official GED scores.</p>`;
   document.getElementById('go-test').onclick = testHome;
-  document.getElementById('go-practice').onclick = () => practiceHome();
+  document.getElementById('go-practice').onclick = practiceHome;
   bindCommon();
 }
 
 function testHome(){
   test = null; prac = null;
+  const allDone = SUBJECTS.every(s => progress.passed.includes(s));
   app.innerHTML = `
     <div class="topbar"><button class="link" id="back">← Home</button></div>
-    <h1 class="page-title">📝 Tests</h1>
-    <div class="card"><p class="rules">Each test has ${TEST_LEN} random questions — ${PER_SUBJECT} each of ${SUBJECTS.join(', ')}.
-      Get <b>${PASS} right</b> to be certified and unlock the next grade. Miss ${MAX_MISSES + 1} and the test ends —
-      you'll see every mistake with how to fix it, then try a brand-new test.</p></div>
+    <h1 class="page-title">📝 GED Practice Tests</h1>
+    <div class="card"><p class="rules">The real GED is four separate tests, and you need a <b>145</b> or higher on each one to pass.
+      Each practice test here has ${TEST_LEN} random questions, balanced across topics like the real test. Get <b>${PASS} right</b> (about 145) to pass.
+      Miss ${MAX_MISSES + 1} and the test ends — you'll see every mistake with how to fix it, then try a fresh test.</p></div>
+    ${allDone ? '<div class="card result-head pass"><p><b>🎓 All four passed!</b> You\'re scoring in the passing range on every subject. Keep practicing weak spots, then schedule the real test.</p></div>' : ''}
     ${resumeCard()}
-    <div class="grades">${GRADES.map(g => {
-      const done = progress.certified.includes(g), open = unlocked(g);
-      const cls = done ? 'done' : open ? 'ready' : 'locked';
-      const status = done ? `Certified ✓ · best ${progress.best[g]}/${TEST_LEN}` : open ? 'Ready to test' : `🔒 Pass ${ord(g - 1)} grade to unlock`;
-      return `<div class="card grade ${cls}">
-        <div class="num">${g}</div>
-        <div class="info"><h3>${ord(g)} Grade</h3><small>${status}</small></div>
-        <button class="${open && !done ? 'primary' : ''}" data-start="${g}" ${open ? '' : 'disabled'}>${done ? 'Retake' : 'Start'}</button>
+    <div class="grades">${SUBJECTS.map(s => {
+      const done = progress.passed.includes(s);
+      return `<div class="card grade ${done ? 'done' : 'ready'}">
+        <div class="num">${GED[s].icon}</div>
+        <div class="info"><h3>${GED[s].name}</h3>
+          <small>${done ? `Passed ✓ · best estimated score ${progress.best[s]} (${band(progress.best[s])})` : `${GED[s].topics.length} topics · the real test is ${GED[s].minutes} minutes`}</small></div>
+        <button class="${done ? '' : 'primary'}" data-start="${s}">${done ? 'Retake' : 'Start'}</button>
       </div>`; }).join('')}
     </div>
     <p style="text-align:center;margin-top:18px"><button class="link" id="reset">Reset progress</button></p>`;
   app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => {
     if (progress.current && !confirm('Starting a new test throws away the one in progress. Continue?')) return;
-    start(+b.dataset.start);
+    start(b.dataset.start);
   });
-  document.getElementById('reset').onclick = () => { if (confirm('Erase all certifications, question history, and practice stats?')){ progress = fresh(); save(); testHome(); } };
+  document.getElementById('reset').onclick = () => { if (confirm('Erase all test results, question history, and practice stats?')){ progress = fresh(); save(); testHome(); } };
   bindCommon(home);
 }
 
-// ---------- practice & learn ----------
-function topicButton(g, s, t, showWhere){
-  const st = progress.topics[topicKey(g, s, t.id)], weak = st && st.miss - st.right / 2 > 0;
-  const status = [weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ');
-  return `<button class="topic${weak ? ' weak' : ''}" data-topic="${g}|${s}|${t.id}">
-    ${showWhere ? `<small>${ord(g)} grade · ${s}</small>` : ''}<b>${esc(t.name)}</b><small>${status}</small></button>`;
-}
-
-const SUBJECT_ICON = { Math: '➗', English: '📖', Science: '🔬', 'Social Studies': '🌎' };
-const countQuestions = (g, s, id) => BANK[g][s].filter(x => !id || x.topic === id).length;
-
-// Practice home: grade tabs, weak spots, and one card per subject.
-function practiceHome(g = practiceGrade){
-  practiceGrade = g; test = null; prac = null;
-  const weak = weakSpots().slice(0, 6);
-  app.innerHTML = `
-    <div class="topbar"><button class="link" id="back">← Home</button></div>
-    <h1 class="page-title">📚 Practice &amp; Learn</h1>
-    <p class="rules">Pick a subject, then a topic. Each topic has a quick lesson and unlimited practice. Practice never counts against your tests.</p>
-    ${weak.length ? `<h2 class="section">⚠️ Your weak spots</h2>
-      <p class="rules">Topics you've missed on tests. Get practice questions right to clear them.</p>
-      <div class="topics">${weak.map(w => topicButton(w.g, w.s, findTopic(w.g, w.s, w.id), true)).join('')}</div>` : ''}
-    <div class="tabs">${GRADES.map(x => `<button data-grade="${x}" class="${x === g ? 'on' : ''}">${ord(x)} Grade</button>`).join('')}</div>
-    <div class="subjects">${SUBJECTS.map(s => {
-      const topics = LESSONS[g][s], stats = topics.map(t => progress.topics[topicKey(g, s, t.id)]).filter(Boolean);
-      const right = stats.reduce((n, st) => n + st.right, 0), tries = stats.reduce((n, st) => n + st.tries, 0);
-      const weakN = stats.filter(st => st.miss - st.right / 2 > 0).length;
-      return `<button class="subject" data-subject="${s}">
-        <span class="icon">${SUBJECT_ICON[s]}</span>
-        <span class="info"><b>${s}</b>
-          <small>${topics.length} topics · ${countQuestions(g, s)} question types</small>
-          <small>${tries ? `${right}/${tries} right in practice` : 'Not practiced yet'}${weakN ? ` · <span class="warn">${weakN} weak spot${weakN > 1 ? 's' : ''}</span>` : ''}</small></span>
-        <span class="chev">›</span></button>`; }).join('')}
-    </div>`;
-  app.querySelectorAll('[data-grade]').forEach(b => b.onclick = () => practiceHome(+b.dataset.grade));
-  app.querySelectorAll('[data-subject]').forEach(b => b.onclick = () => subjectPage(g, b.dataset.subject));
-  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => { const [tg, ts, id] = b.dataset.topic.split('|'); lesson(+tg, ts, id); });
-  bindCommon(home);
-}
-
-// One subject: a mixed-practice button and every topic with what it covers.
-function subjectPage(g, s){
-  practiceGrade = g; prac = null;
-  app.innerHTML = `
-    <div class="topbar"><button class="link" id="back">← All subjects</button></div>
-    <h1 class="page-title">${SUBJECT_ICON[s]} ${s} <small class="grade-note">${ord(g)} grade</small></h1>
-    <button class="mix" id="mix"><b>🔀 Practice all of ${s}</b><small>Mixed questions from every topic below</small></button>
-    <h2 class="section">Topics</h2>
-    <div class="topic-list">${LESSONS[g][s].map(t => {
-      const st = progress.topics[topicKey(g, s, t.id)], weak = st && st.miss - st.right / 2 > 0;
-      return `<button class="topic wide${weak ? ' weak' : ''}" data-topic="${g}|${s}|${t.id}">
-        <b>${esc(t.name)}</b>
-        <span class="covers">${esc(t.covers)}</span>
-        <small>${countQuestions(g, s, t.id)} question types · ${[weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ')}</small>
-      </button>`; }).join('')}
-    </div>`;
-  document.getElementById('mix').onclick = () => { prac = { g, s, id: null, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
-  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => lesson(g, s, b.dataset.topic.split('|')[2]));
-  bindCommon(() => practiceHome(g));
-}
-
-function lesson(g, s, id){
-  prac = null;
-  const t = findTopic(g, s, id);
-  app.innerHTML = `
-    <div class="topbar"><button class="link" id="back">← All topics</button></div>
-    <div class="card lesson">
-      <span class="tag">${ord(g)} grade · ${s}</span>
-      <h1>${esc(t.name)}</h1>
-      <p class="covers">Covers: ${esc(t.covers)}</p>
-      <p class="intro">${esc(t.intro)}</p>
-      <h3>Key rules</h3>
-      <ul class="points">${t.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
-      <h3>Worked example</h3>
-      <div class="example"><div class="prob">${esc(t.ex[0])}</div><div>${esc(t.ex[1])}</div></div>
-      <div class="actions"><button class="primary" id="practice">Practice this topic →</button></div>
-    </div>`;
-  document.getElementById('practice').onclick = () => { prac = { g, s, id, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
-  bindCommon(() => subjectPage(g, s));
-}
-
-// Practice one topic (p.id) or, when p.id is null, a mix of the whole subject.
-function nextPractice(){
-  const p = prac, t = p.id && findTopic(p.g, p.s, p.id), items = BANK[p.g][p.s].filter(x => !p.id || x.topic === p.id);
-  let q, it;
-  for (let i = 0; i < 20; i++){   // avoid showing the exact same question twice in a row
-    it = pick(items);
-    q = typeof it === 'function' ? it() : MQ(it[0], it[1], shuffle(it[2]), it[3]);
-    if (q.q + q.answer !== p.last) break;
-  }
-  q.topic = it.topic;
-  p.q = q; p.last = q.q + q.answer; p.answered = false;
-  app.innerHTML = `
-    <div class="topbar"><button class="link" id="back">← ${t ? 'Lesson' : 'Topics'}</button><span><b>${t ? esc(t.name) : `All of ${p.s}`}</b></span><span id="pstats"></span></div>
-    <div class="card">
-      <span class="tag">Practice · ${t ? p.s : esc(findTopic(p.g, p.s, q.topic).name)}</span>
-      <div class="q">${esc(q.q)}</div>
-      <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
-      <div id="feedback"></div>
-    </div>`;
-  drawPracticeStats();
-  app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => practiceAnswer(+b.dataset.k));
-  bindCommon(() => p.id ? lesson(p.g, p.s, p.id) : subjectPage(p.g, p.s));
-}
-const drawPracticeStats = () => { document.getElementById('pstats').textContent = `🔥 Streak ${prac.streak} · ${prac.right}/${prac.total} right`; };
-
-function practiceAnswer(k){
-  const p = prac; if (!p || p.answered) return;
-  p.answered = true;
-  const q = p.q, ok = q.choices[k] === q.answer, st = tstat(topicKey(p.g, p.s, q.topic));
-  p.total++; st.tries++;
-  if (ok){ p.right++; p.streak++; st.right++; p.streak % 5 === 0 ? Sound.milestone() : Sound.right(); }
-  else { p.streak = 0; Sound.wrong(); }
-  save();
-  drawPracticeStats();
-  app.querySelectorAll('[data-k]').forEach((b, i) => {
-    b.disabled = true;
-    if (q.choices[i] === q.answer) b.classList.add('correct'); else if (i === k) b.classList.add('wrong');
-  });
-  document.getElementById('feedback').innerHTML = `
-    <div class="ans ${ok ? 'right' : 'yours'}">${ok ? `✓ Correct!${p.streak >= 3 ? ` ${p.streak} in a row 🔥` : ''}` : `✗ Not quite. The answer is: ${esc(q.answer)}`}</div>
-    <div class="fix"><b>${ok ? 'Why:' : 'How to fix it:'}</b> ${esc(q.explain)}</div>
-    <div class="actions"><button class="primary" id="nextq">Next question →</button></div>`;
-  document.getElementById('nextq').onclick = nextPractice;
-}
-
-function start(grade){
-  test = { grade, qs: buildTest(grade), i: 0, right: 0, misses: [], locked: false };
+function start(s){
+  test = { subject: s, qs: buildTest(s), i: 0, right: 0, misses: [], locked: false };
   progress.current = test; save();
   showQuestion();
 }
@@ -2559,13 +2959,13 @@ function showQuestion(){
   const t = test, q = t.qs[t.i];
   t.locked = false;
   app.innerHTML = `
-    <div class="topbar"><span><b>${ord(t.grade)} Grade Test</b></span><span>Question ${t.i + 1} of ${TEST_LEN}</span>
+    <div class="topbar"><span><b>${GED[t.subject].icon} ${GED[t.subject].name}</b></span><span>Question ${t.i + 1} of ${TEST_LEN}</span>
       <span>Misses: ${t.misses.length} / ${MAX_MISSES} allowed</span>
       <button class="link" id="quit">Save &amp; exit</button></div>
     <div class="bar"><i style="width:${t.i / TEST_LEN * 100}%"></i></div>
     <div class="card">
-      <span class="tag">${q.subject}</span>
-      <div class="q">${esc(q.q)}</div>
+      <span class="tag">${esc(q.topicName)}</span>
+      ${qHtml(q.q)}
       <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
     </div>`;
   window.scrollTo(0, 0);
@@ -2583,58 +2983,180 @@ function answer(k){
   if (chosen === q.answer) t.right++;
   else {
     t.misses.push({ ...q, chosen });
-    if (q.topic) tstat(topicKey(t.grade, q.subject, q.topic)).miss++;
+    tstat(topicKey(t.subject, q.topic)).miss++;
   }
   setTimeout(() => {
     if (test !== t) return;
     t.i++;
     if (t.misses.length > MAX_MISSES || t.i === TEST_LEN) return results();
-    if (t.i % PER_SUBJECT === 0) Sound.milestone();   // a little chime every 25 questions
+    if (t.i % 10 === 0) Sound.milestone();   // a little chime every 10 questions
     save(); showQuestion();
   }, 260);
 }
 
 function results(){
-  const t = test, passed = t.misses.length <= MAX_MISSES && t.i === TEST_LEN;
-  const next = GRADES[GRADES.indexOf(t.grade) + 1];
+  const t = test, name = GED[t.subject].name, passed = t.i === TEST_LEN && t.right >= PASS, score = estScore(t.right, TEST_LEN);
   if (passed){
-    if (!progress.certified.includes(t.grade)) progress.certified.push(t.grade);
-    progress.best[t.grade] = Math.max(progress.best[t.grade] || 0, t.right);
+    if (!progress.passed.includes(t.subject)) progress.passed.push(t.subject);
+    progress.best[t.subject] = Math.max(progress.best[t.subject] || 0, score);
   }
   markSeen(t.qs.slice(0, t.i));
   progress.current = null;
   save();
   passed ? Sound.pass() : Sound.fail();
+  const nextS = SUBJECTS.find(s => !progress.passed.includes(s));
+  const byTopic = {};
+  t.misses.forEach(m => byTopic[m.topicName] = (byTopic[m.topicName] || 0) + 1);
+  const focus = Object.entries(byTopic).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, c]) => `${esc(n)} (${c} missed)`).join(', ');
   const head = passed
     ? `<div class="card result-head pass"><div class="big">🎓</div>
-        <h2>${ord(t.grade)} Grade Certified!</h2>
-        <p>You scored <b>${t.right}/${TEST_LEN}</b>. You know everything you need to know in ${ord(t.grade)} grade.</p>
-        <div class="actions">${next
-          ? `<button class="primary" id="next">Start ${ord(next)} Grade →</button>`
-          : `<p><b>You've passed every grade here. Top of the class!</b></p>`}
-          <button id="home">All grades</button></div></div>`
+        <h2>You passed ${name}!</h2>
+        <p>You got <b>${t.right}/${TEST_LEN}</b> — an estimated score of <b>${score}</b> (${band(score)}).</p>
+        ${nextS ? '' : '<p><b>That\'s all four subjects — you\'re ready to schedule the real GED!</b></p>'}
+        <div class="actions">${nextS ? `<button class="primary" id="next">Next: ${GED[nextS].name} →</button>` : ''}
+          <button id="home">All tests</button></div></div>`
     : `<div class="card result-head fail"><div class="big">📝</div>
-        <h2>Not ${ord(t.grade)} grade level yet</h2>
-        <p>You missed ${t.misses.length} questions (${t.right} right out of ${t.i} answered), so this test is over.
-          Study the fixes below, then take a new test with different questions.</p>
-        <div class="actions"><button class="primary" id="retry">Take a new randomized test</button><button id="home">All grades</button></div></div>`;
+        <h2>Not passing yet</h2>
+        <p>You missed ${t.misses.length} questions (${t.right} right out of ${t.i} answered), so this test is over. A passing score needs ${PASS} of ${TEST_LEN}.</p>
+        ${focus ? `<p>Focus on: <b>${focus}</b></p>` : ''}
+        <div class="actions"><button class="primary" id="retry">Take a new ${name} test</button><button id="study">Study weak spots</button><button id="home">All tests</button></div></div>`;
   const review = t.misses.length ? `
-    <h2 class="section">${passed ? 'Still worth reviewing' : "What you got wrong — and how to fix it"}</h2>
+    <h2 class="section">${passed ? 'Still worth reviewing' : 'What you got wrong — and how to fix it'}</h2>
     ${t.misses.map(m => `<div class="card miss">
-      <span class="tag">${m.subject}</span>
-      <div class="q">${esc(m.q)}</div>
+      <span class="tag">${esc(m.topicName)}</span>
+      ${qHtml(m.q)}
       <div class="ans yours">✗ Your answer: ${esc(m.chosen)}</div>
       <div class="ans right">✓ Correct answer: ${esc(m.answer)}</div>
       <div class="fix"><b>How to fix it:</b> ${esc(m.explain)}</div>
-      ${m.topic ? `<button class="link learn" data-learn="${m.subject}|${m.topic}">📚 Learn this topic: ${esc(findTopic(t.grade, m.subject, m.topic).name)} →</button>` : ''}
+      <button class="link learn" data-learn="${m.topic}">📚 Learn this topic: ${esc(m.topicName)} →</button>
     </div>`).join('')}
-    ${passed ? '' : `<div class="actions"><button class="primary" id="retry2">Take a new randomized test</button></div>`}` : '';
+    ${passed ? '' : `<div class="actions"><button class="primary" id="retry2">Take a new ${name} test</button></div>`}` : '';
   app.innerHTML = head + review;
   window.scrollTo(0, 0);
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
-  on('next', () => start(next)); on('home', testHome);
-  on('retry', () => start(t.grade)); on('retry2', () => start(t.grade));
-  app.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => { test = null; const [s, id] = b.dataset.learn.split('|'); lesson(t.grade, s, id); });
+  on('next', () => start(nextS)); on('home', testHome); on('study', practiceHome);
+  on('retry', () => start(t.subject)); on('retry2', () => start(t.subject));
+  app.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => { test = null; lesson(t.subject, b.dataset.learn); });
+}
+
+// ---------- practice & learn ----------
+function topicButton(s, t, showWhere){
+  const st = progress.topics[topicKey(s, t.id)], weak = st && st.miss - st.right / 2 > 0;
+  const status = [weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ');
+  return `<button class="topic${weak ? ' weak' : ''}" data-topic="${s}|${t.id}">
+    ${showWhere ? `<small>${GED[s].icon} ${GED[s].short}</small>` : ''}<b>${esc(t.name)}</b><small>${status}</small></button>`;
+}
+
+function practiceHome(){
+  test = null; prac = null;
+  const weak = weakSpots().slice(0, 6);
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← Home</button></div>
+    <h1 class="page-title">📚 Practice &amp; Learn</h1>
+    <p class="rules">Pick a GED subject, then a topic. Each topic has a quick lesson and unlimited practice. Practice never counts against your tests.</p>
+    ${weak.length ? `<h2 class="section">⚠️ Your weak spots</h2>
+      <p class="rules">Topics you've missed on practice tests. Get practice questions right to clear them.</p>
+      <div class="topics">${weak.map(w => topicButton(w.s, findTopic(w.s, w.id), true)).join('')}</div>` : ''}
+    <div class="subjects">${SUBJECTS.map(s => {
+      const topics = GED[s].topics, stats = topics.map(t => progress.topics[topicKey(s, t.id)]).filter(Boolean);
+      const right = stats.reduce((n, st) => n + st.right, 0), tries = stats.reduce((n, st) => n + st.tries, 0);
+      const weakN = stats.filter(st => st.miss - st.right / 2 > 0).length;
+      return `<button class="subject" data-subject="${s}">
+        <span class="icon">${GED[s].icon}</span>
+        <span class="info"><b>${GED[s].name}</b>
+          <small>${topics.length} topics · ${allItems(s).length} question types</small>
+          <small>${tries ? `${right}/${tries} right in practice` : 'Not practiced yet'}${weakN ? ` · <span class="warn">${weakN} weak spot${weakN > 1 ? 's' : ''}</span>` : ''}</small></span>
+        <span class="chev">›</span></button>`; }).join('')}
+    </div>`;
+  app.querySelectorAll('[data-subject]').forEach(b => b.onclick = () => subjectPage(b.dataset.subject));
+  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => { const [s, id] = b.dataset.topic.split('|'); lesson(s, id); });
+  bindCommon(home);
+}
+
+function subjectPage(s){
+  prac = null;
+  const totalW = GED[s].topics.reduce((n, t) => n + t.w, 0);
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← All subjects</button></div>
+    <h1 class="page-title">${GED[s].icon} ${GED[s].name}</h1>
+    <p class="rules">${esc(GED[s].about)}</p>
+    <button class="mix" id="mix"><b>🔀 Practice all of ${GED[s].short}</b><small>Mixed questions from every topic below</small></button>
+    <h2 class="section">Topics</h2>
+    <div class="topic-list">${GED[s].topics.map(t => {
+      const st = progress.topics[topicKey(s, t.id)], weak = st && st.miss - st.right / 2 > 0;
+      return `<button class="topic wide${weak ? ' weak' : ''}" data-topic="${s}|${t.id}">
+        <b>${esc(t.name)}</b>
+        <span class="covers">${esc(t.covers)}</span>
+        <small>≈${Math.round(t.w / totalW * 100)}% of the practice test · ${t.items.length} question types · ${[weak ? `<span class="warn">Missed ${st.miss} on tests</span>` : '', st?.tries ? `${st.right}/${st.tries} right in practice` : 'Not practiced yet'].filter(Boolean).join(' · ')}</small>
+      </button>`; }).join('')}
+    </div>`;
+  document.getElementById('mix').onclick = () => { prac = { s, id: null, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
+  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => lesson(s, b.dataset.topic.split('|')[1]));
+  bindCommon(practiceHome);
+}
+
+function lesson(s, id){
+  prac = null;
+  const t = findTopic(s, id);
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← ${GED[s].short} topics</button></div>
+    <div class="card lesson">
+      <span class="tag">GED ${GED[s].name}</span>
+      <h1>${esc(t.name)}</h1>
+      <p class="covers">Covers: ${esc(t.covers)}</p>
+      <p class="intro">${esc(t.intro)}</p>
+      <h3>Key rules</h3>
+      <ul class="points">${t.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+      <h3>Worked example</h3>
+      <div class="example"><div class="prob">${esc(t.ex[0])}</div><div>${esc(t.ex[1])}</div></div>
+      <div class="actions"><button class="primary" id="practice">Practice this topic →</button></div>
+    </div>`;
+  document.getElementById('practice').onclick = () => { prac = { s, id, streak: 0, right: 0, total: 0, last: null }; nextPractice(); };
+  bindCommon(() => subjectPage(s));
+}
+
+// Practice one topic (p.id) or, when p.id is null, a mix of the whole subject.
+function nextPractice(){
+  const p = prac, t = p.id && findTopic(p.s, p.id), items = t ? t.items : allItems(p.s);
+  let q, it;
+  for (let i = 0; i < 20; i++){   // avoid showing the exact same question twice in a row
+    it = pick(items);
+    q = makeQ(findTopic(p.s, it.ged), it);
+    if (q.key !== p.last) break;
+  }
+  p.q = q; p.last = q.key; p.answered = false;
+  app.innerHTML = `
+    <div class="topbar"><button class="link" id="back">← ${t ? 'Lesson' : 'Topics'}</button><span><b>${t ? esc(t.name) : `All of ${GED[p.s].short}`}</b></span><span id="pstats"></span></div>
+    <div class="card">
+      <span class="tag">Practice · ${esc(q.topicName)}</span>
+      ${qHtml(q.q)}
+      <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
+      <div id="feedback"></div>
+    </div>`;
+  drawPracticeStats();
+  app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => practiceAnswer(+b.dataset.k));
+  bindCommon(() => p.id ? lesson(p.s, p.id) : subjectPage(p.s));
+}
+const drawPracticeStats = () => { document.getElementById('pstats').textContent = `🔥 Streak ${prac.streak} · ${prac.right}/${prac.total} right`; };
+
+function practiceAnswer(k){
+  const p = prac; if (!p || p.answered) return;
+  p.answered = true;
+  const q = p.q, ok = q.choices[k] === q.answer, st = tstat(topicKey(p.s, q.topic));
+  p.total++; st.tries++;
+  if (ok){ p.right++; p.streak++; st.right++; p.streak % 5 === 0 ? Sound.milestone() : Sound.right(); }
+  else { p.streak = 0; Sound.wrong(); }
+  save();
+  drawPracticeStats();
+  app.querySelectorAll('[data-k]').forEach((b, i) => {
+    b.disabled = true;
+    if (q.choices[i] === q.answer) b.classList.add('correct'); else if (i === k) b.classList.add('wrong');
+  });
+  document.getElementById('feedback').innerHTML = `
+    <div class="ans ${ok ? 'right' : 'yours'}">${ok ? `✓ Correct!${p.streak >= 3 ? ` ${p.streak} in a row 🔥` : ''}` : `✗ Not quite. The answer is: ${esc(q.answer)}`}</div>
+    <div class="fix"><b>${ok ? 'Why:' : 'How to fix it:'}</b> ${esc(q.explain)}</div>
+    <div class="actions"><button class="primary" id="nextq">Next question →</button></div>`;
+  document.getElementById('nextq').onclick = nextPractice;
 }
 
 document.addEventListener('keydown', e => {
