@@ -23,6 +23,10 @@ A single-file study site with a level ladder: **7th Grade → 8th Grade → GED*
 
 Dim theme only; Web Audio sound effects with a mute button.
 
+- **Scratch pad** — the 📝 button (next to mute, always on screen) opens a notes panel for working out
+  problems. Text is kept in `localStorage` key `gradecheck.scratch` until you press Clear. The global
+  keydown handler ignores events from `textarea`/`input`, so typing 1-4 there doesn't answer questions.
+
 ## How the code is organized (all in `index.html`)
 
 1. **Helpers** — `MQ(q, correct, wrongs, explain)` builds a question; `fromTable`, `fromGroups`,
