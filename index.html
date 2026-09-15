@@ -111,6 +111,8 @@
   .subject-strip span{font-size:.85rem;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:4px 12px}
   .subject-strip span.done{color:var(--good);border-color:var(--good);background:var(--good-bg)}
   .passage{font-size:1rem;font-weight:400;line-height:1.6;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0 0;white-space:pre-line}
+  .grade .btns{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  .grade .btns button{padding:8px 12px;font-size:.9rem}
   .ladder{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:0 0 16px}
   .ladder span{font-size:.9rem;font-weight:600;border:1px solid var(--line);border-radius:99px;padding:5px 14px;color:var(--muted)}
   .ladder span.done{color:var(--good);border-color:var(--good);background:var(--good-bg)}
@@ -2841,7 +2843,7 @@ const GED_SUBJECTS = Object.keys(GED);
 const GRADE_SPEC = { perSubject: 25, len: 100, pass: 80 }, GED_SPEC = { len: 50, pass: 33 };
 const specOf = t => LEVEL[t.level].kind === 'grade' ? GRADE_SPEC : GED_SPEC;
 const maxMisses = t => specOf(t).len - specOf(t).pass;
-const testTitle = t => LEVEL[t.level].kind === 'grade' ? `${LEVEL[t.level].name} Test` : `GED ${GED[t.subject].name}`;
+const testTitle = t => (t.practice ? 'Practice: ' : '') + (LEVEL[t.level].kind === 'grade' ? `${LEVEL[t.level].name} Test` : `GED ${GED[t.subject].name}`);
 
 const KEY = 'gradecheck.v2';
 // certified: grade levels passed · best: best grade score · gedPassed/gedBest: per GED subject
@@ -2935,7 +2937,7 @@ const resumeCard = () => { const c = progress.current; return c && LEVEL[c.level
     <button class="primary" id="resume">Resume</button></div>` : ''; };
 function bindCommon(back){
   const r = document.getElementById('resume');
-  if (r) r.onclick = () => { test = progress.current; showQuestion(); };
+  if (r) r.onclick = () => { test = progress.current; test.i >= specOf(test).len ? results() : showQuestion(); };
   const b = document.getElementById('back');
   if (b) b.onclick = back;
   window.scrollTo(0, 0);
@@ -2975,7 +2977,8 @@ function testHome(){
     <h1 class="page-title">📝 Tests</h1>
     <div class="card"><p class="rules">Start with 7th grade. Each grade test has ${GRADE_SPEC.len} random questions — ${GRADE_SPEC.perSubject} each of Math, English, Science, and Social Studies.
       Get <b>${GRADE_SPEC.pass} right</b> to be certified and unlock the next level. Miss ${GRADE_SPEC.len - GRADE_SPEC.pass + 1} and the test ends — you'll see every mistake with how to fix it, then try a brand-new test.
-      After 8th grade comes the <b>GED</b>: four separate subject tests, just like the real thing.</p></div>
+      After 8th grade comes the <b>GED</b>: four separate subject tests, just like the real thing.</p>
+      <p class="rules"><b>Want a warm-up?</b> A <b>practice test</b> is the same test, but it tells you right away whether each answer is right or wrong. Practice tests don't unlock levels.</p></div>
     ${resumeCard()}
     <div class="grades">${LEVELS.map(l => {
       const done = levelDone(l.id), open = unlocked(l.id), cls = done ? 'done' : open ? 'ready' : 'locked';
@@ -2983,7 +2986,8 @@ function testHome(){
         const status = done ? `Certified ✓ · best ${progress.best[l.id]}/${GRADE_SPEC.len}` : open ? 'Ready to test' : `🔒 Pass ${LEVELS[LEVELS.indexOf(l) - 1].short} to unlock`;
         return `<div class="card grade ${cls}"><div class="num">${l.id}</div>
           <div class="info"><h3>${l.name}</h3><small>${status}</small></div>
-          <button class="${open && !done ? 'primary' : ''}" data-start="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Retake' : 'Start'}</button></div>`;
+          <div class="btns"><button class="${open && !done ? 'primary' : ''}" data-start="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Retake' : 'Start'}</button>
+            <button data-ptest="${l.id}" ${open ? '' : 'disabled'}>Practice test</button></div></div>`;
       }
       const status = done ? 'All four subject tests passed ✓' : open ? `${gedN} of 4 subject tests passed` : '🔒 Pass 8th grade to unlock';
       return `<div class="card grade ${cls}"><div class="num">🎓</div>
@@ -2992,10 +2996,12 @@ function testHome(){
     }).join('')}
     </div>
     <p style="text-align:center;margin-top:18px"><button class="link" id="reset">Reset progress</button></p>`;
-  app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => {
+  const begin = (level, subject, practice) => {
     if (progress.current && !confirm('Starting a new test throws away the one in progress. Continue?')) return;
-    start(b.dataset.start);
-  });
+    start(level, subject, practice);
+  };
+  app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => begin(b.dataset.start, null, false));
+  app.querySelectorAll('[data-ptest]').forEach(b => b.onclick = () => begin(b.dataset.ptest, null, true));
   document.getElementById('open-ged').onclick = gedTestsPage;
   document.getElementById('reset').onclick = () => { if (confirm('Erase all certifications, test results, question history, and practice stats?')){ progress = fresh(); save(); testHome(); } };
   bindCommon(home);
@@ -3008,7 +3014,8 @@ function gedTestsPage(){
     <h1 class="page-title">🎓 GED Practice Tests</h1>
     <div class="card"><p class="rules">The real GED is four separate tests, and you need a <b>145</b> or higher on each one to pass.
       Each practice test here has ${GED_SPEC.len} random questions, balanced across topics like the real test. Get <b>${GED_SPEC.pass} right</b> (about 145) to pass.
-      Miss ${GED_SPEC.len - GED_SPEC.pass + 1} and the test ends — you'll see every mistake with how to fix it.</p></div>
+      Miss ${GED_SPEC.len - GED_SPEC.pass + 1} and the test ends — you'll see every mistake with how to fix it.</p>
+      <p class="rules"><b>Want a warm-up?</b> A <b>practice test</b> is the same test, but it tells you right away whether each answer is right or wrong. It doesn't count as passing.</p></div>
     ${levelDone('GED') ? '<div class="card result-head pass"><p><b>🎓 All four passed!</b> You\'re scoring in the passing range on every subject. Keep practicing weak spots, then schedule the real test.</p></div>' : ''}
     ${resumeCard()}
     <div class="grades">${GED_SUBJECTS.map(s => {
@@ -3017,34 +3024,41 @@ function gedTestsPage(){
         <div class="num">${GED[s].icon}</div>
         <div class="info"><h3>${GED[s].name}</h3>
           <small>${done ? `Passed ✓ · best estimated score ${progress.gedBest[s]} (${band(progress.gedBest[s])})` : `${GED[s].topics.length} topics · the real test is ${GED[s].minutes} minutes`}</small></div>
-        <button class="${done ? '' : 'primary'}" data-ged="${s}">${done ? 'Retake' : 'Start'}</button>
+        <div class="btns"><button class="${done ? '' : 'primary'}" data-ged="${s}">${done ? 'Retake' : 'Start'}</button>
+          <button data-pged="${s}">Practice test</button></div>
       </div>`; }).join('')}
     </div>`;
-  app.querySelectorAll('[data-ged]').forEach(b => b.onclick = () => {
+  const begin = (subject, practice) => {
     if (progress.current && !confirm('Starting a new test throws away the one in progress. Continue?')) return;
-    start('GED', b.dataset.ged);
-  });
+    start('GED', subject, practice);
+  };
+  app.querySelectorAll('[data-ged]').forEach(b => b.onclick = () => begin(b.dataset.ged, false));
+  app.querySelectorAll('[data-pged]').forEach(b => b.onclick = () => begin(b.dataset.pged, true));
   bindCommon(testHome);
 }
 
-function start(level, subject = null){
-  test = { level, subject, qs: buildTest(level, subject), i: 0, right: 0, misses: [], locked: false };
+// practice = true: the same test, but each answer is marked right or wrong right away, it never ends early,
+// and it doesn't certify a grade or pass a GED subject.
+function start(level, subject = null, practice = false){
+  prac = null;
+  test = { level, subject, practice, qs: buildTest(level, subject), i: 0, right: 0, misses: [], locked: false };
   progress.current = test; save();
   showQuestion();
 }
 
 function showQuestion(){
   const t = test, q = t.qs[t.i], spec = specOf(t), grade = LEVEL[t.level].kind === 'grade';
-  t.locked = false;
+  t.locked = false; t.awaitNext = false;
   app.innerHTML = `
     <div class="topbar"><span><b>${grade ? '' : GED[t.subject].icon + ' '}${testTitle(t)}</b></span><span>Question ${t.i + 1} of ${spec.len}</span>
-      <span>Misses: ${t.misses.length} / ${maxMisses(t)} allowed</span>
+      <span id="tscore">${t.practice ? `Score: ${t.right}/${t.i} right` : `Misses: ${t.misses.length} / ${maxMisses(t)} allowed`}</span>
       <button class="link" id="quit">Save &amp; exit</button></div>
     <div class="bar"><i style="width:${t.i / spec.len * 100}%"></i></div>
     <div class="card">
       <span class="tag">${grade ? `${q.subject} · ` : ''}${esc(q.topicName)}</span>
       ${qHtml(q.q)}
       <div class="choices">${q.choices.map((c, k) => `<button data-k="${k}"><kbd>${k + 1}</kbd><span>${esc(c)}</span></button>`).join('')}</div>
+      <div id="feedback"></div>
     </div>`;
   window.scrollTo(0, 0);
   app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => answer(+b.dataset.k));
@@ -3054,15 +3068,29 @@ function showQuestion(){
 function answer(k){
   const t = test; if (!t || t.locked) return;
   t.locked = true;
-  Sound.answer();
-  const q = t.qs[t.i], chosen = q.choices[k];
-  app.querySelector(`[data-k="${k}"]`).classList.add('picked');
+  const q = t.qs[t.i], chosen = q.choices[k], ok = chosen === q.answer;
   app.querySelectorAll('[data-k]').forEach(b => b.disabled = true);
-  if (chosen === q.answer) t.right++;
+  if (ok) t.right++;
   else {
     t.misses.push({ ...q, chosen });
     tstat(topicKey(t.level, q.subject, q.topic)).miss++;
   }
+  if (t.practice){
+    ok ? Sound.right() : Sound.wrong();
+    app.querySelectorAll('[data-k]').forEach((b, i) => { if (q.choices[i] === q.answer) b.classList.add('correct'); else if (i === k) b.classList.add('wrong'); });
+    t.i++; save();   // saved before showing feedback, so leaving now won't ask this question again
+    const last = t.i === specOf(t).len;
+    document.getElementById('tscore').textContent = `Score: ${t.right}/${t.i} right`;
+    document.getElementById('feedback').innerHTML = `
+      <div class="ans ${ok ? 'right' : 'yours'}">${ok ? '✓ Correct!' : `✗ Wrong. The answer is: ${esc(q.answer)}`}</div>
+      <div class="fix"><b>${ok ? 'Why:' : 'How to fix it:'}</b> ${esc(q.explain)}</div>
+      <div class="actions"><button class="primary" id="tnext">${last ? 'See results →' : 'Next question →'}</button></div>`;
+    document.getElementById('tnext').onclick = testNext;
+    t.awaitNext = true;
+    return;
+  }
+  Sound.answer();
+  app.querySelector(`[data-k="${k}"]`).classList.add('picked');
   setTimeout(() => {
     if (test !== t) return;
     t.i++;
@@ -3072,7 +3100,50 @@ function answer(k){
   }, 260);
 }
 
+function testNext(){
+  const t = test; if (!t || !t.awaitNext) return;
+  t.awaitNext = false;
+  if (t.i === specOf(t).len) return results();
+  if (t.i % (LEVEL[t.level].kind === 'grade' ? 25 : 10) === 0) Sound.milestone();
+  showQuestion();
+}
+
+function practiceResults(){
+  const t = test, L = LEVEL[t.level], spec = specOf(t), wouldPass = t.right >= spec.pass, grade = L.kind === 'grade';
+  const byTopic = {};
+  t.misses.forEach(m => { const n = grade ? `${m.subject}: ${m.topicName}` : m.topicName; byTopic[n] = (byTopic[n] || 0) + 1; });
+  const focus = Object.entries(byTopic).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, c]) => `${esc(n)} (${c} missed)`).join(', ');
+  const score = estScore(t.right, spec.len), open = unlocked(t.level);
+  markSeen(t.qs);
+  progress.current = null;
+  save();
+  wouldPass ? Sound.pass() : Sound.milestone();
+  app.innerHTML = `
+    <div class="card result-head ${wouldPass ? 'pass' : 'fail'}"><div class="big">${wouldPass ? '💪' : '📝'}</div>
+      <h2>Practice test complete</h2>
+      <p>You got <b>${t.right}/${spec.len}</b>${grade ? '' : ` — an estimated GED score of <b>${score}</b> (${band(score)})`}.
+        On the real test, that would ${wouldPass ? '<b>pass</b>' : '<b>not pass yet</b>'} (you need ${spec.pass}).</p>
+      ${focus ? `<p>Focus on: <b>${focus}</b></p>` : ''}
+      <p class="rules">Practice tests don't ${grade ? 'unlock the next level' : 'count as passing'}.</p>
+      <div class="actions">${open ? `<button class="primary" id="real">Take the real test →</button>` : ''}
+        <button id="again">Another practice test</button><button id="home">${grade ? 'All tests' : 'GED tests'}</button></div></div>
+    ${t.misses.length ? `<h2 class="section">Questions you missed</h2>
+      ${t.misses.map(m => `<div class="card miss">
+        <span class="tag">${grade ? `${m.subject} · ` : ''}${esc(m.topicName)}</span>
+        ${qHtml(m.q)}
+        <div class="ans yours">✗ Your answer: ${esc(m.chosen)}</div>
+        <div class="ans right">✓ Correct answer: ${esc(m.answer)}</div>
+        <div class="fix"><b>How to fix it:</b> ${esc(m.explain)}</div>
+        <button class="link learn" data-learn="${m.subject}|${m.topic}">📚 Learn this topic: ${esc(m.topicName)} →</button>
+      </div>`).join('')}` : ''}`;
+  window.scrollTo(0, 0);
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('real', () => start(t.level, t.subject)); on('again', () => start(t.level, t.subject, true)); on('home', grade ? testHome : gedTestsPage);
+  app.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => { test = null; const [s, id] = b.dataset.learn.split('|'); lesson(t.level, s, id); });
+}
+
 function results(){
+  if (test.practice) return practiceResults();
   const t = test, L = LEVEL[t.level], spec = specOf(t), passed = t.i === spec.len && t.right >= spec.pass;
   let head;
   if (L.kind === 'grade'){
@@ -3274,6 +3345,7 @@ document.addEventListener('keydown', e => {
     const k = +e.key - 1; if (k >= 0 && k < prac.q.choices.length) practiceAnswer(k);
     return;
   }
+  if (test?.awaitNext){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); testNext(); } return; }
   if (!test || test.locked || !app.querySelector('[data-k]')) return;
   const k = +e.key - 1; if (k >= 0 && k < test.qs[test.i].choices.length) answer(k);
 });

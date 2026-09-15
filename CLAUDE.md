@@ -15,6 +15,9 @@ A single-file study site with a level ladder: **7th Grade → 8th Grade → GED*
   33 right ≈ an estimated 145 (passing); the 18th miss ends it. Scores are rough estimates (`estScore`),
   labeled unofficial. The GED level counts as done when all four are passed.
 - Every failed test shows each mistake, how to fix it, and a link to that topic's lesson. Tests save mid-way.
+- **Practice test** (button next to every test) — the same test (`start(level, subject, true)`), but each
+  answer is marked right/wrong with the explanation before moving on, it never ends early, and it
+  doesn't certify a grade or pass a GED subject. Results say whether the score *would* pass.
 - **Practice & Learn** — level tabs (open on the highest unlocked level; practice is never locked) →
   subject → topic → lesson → unlimited practice. Topics missed on tests show as **weak spots**.
 
@@ -48,3 +51,7 @@ Progress lives in `localStorage` key `gradecheck.v2` (`certified`, `best`, `gedP
 ## Run it
 
 Open `C:\Users\arche\grade-check\index.html` in any browser.
+
+The file is now too big for the Browser pane's `file://` snapshot, so preview it over HTTP: there's a
+`grade-check` entry in `C:\Users\arche\.claude\launch.json` (port 8083). Note `localhost` has its own
+localStorage, separate from the live site.
