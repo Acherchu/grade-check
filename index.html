@@ -113,15 +113,17 @@
   .passage{font-size:1rem;font-weight:400;line-height:1.6;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0 0;white-space:pre-line}
   .grade .btns{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
   .grade .btns button{padding:8px 12px;font-size:.9rem}
-  .pad-btn{position:fixed;bottom:14px;right:64px;z-index:10;width:42px;height:42px;padding:0;border-radius:50%;font-size:1.1rem;opacity:.8}
+  .draw-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9;pointer-events:none;touch-action:none}
+  body.drawing .draw-canvas{pointer-events:auto;cursor:crosshair}
+  .pad-btn{position:fixed;bottom:14px;right:64px;z-index:12;width:42px;height:42px;padding:0;border-radius:50%;font-size:1.1rem;opacity:.8}
   .pad-btn:hover, .pad-btn.on{opacity:1}
-  .pad-btn.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--card))}
-  .pad{position:fixed;bottom:64px;right:14px;z-index:11;width:min(380px,calc(100vw - 28px));background:var(--card);border:1px solid var(--line);
-    border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}
-  .pad-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}
-  .pad-head .link{padding:2px 6px}
-  .pad textarea{border:none;outline:none;resize:vertical;background:var(--bg);color:var(--ink);font:15px/1.5 ui-monospace,Consolas,monospace;
-    padding:12px;min-height:180px;max-height:50vh;width:100%}
+  .pad-btn.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,var(--card))}
+  .draw-tools{position:fixed;bottom:64px;right:14px;z-index:12;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px;box-shadow:0 8px 28px rgba(0,0,0,.45);max-width:calc(100vw - 28px)}
+  .draw-tools button{padding:6px 10px;border-radius:10px;font-size:1rem}
+  .draw-tools button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,var(--card))}
+  .draw-tools .swatch{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid var(--line)}
+  .draw-tools .swatch.on{border-color:var(--ink);transform:scale(1.12)}
   .ladder{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:0 0 16px}
   .ladder span{font-size:.9rem;font-weight:600;border:1px solid var(--line);border-radius:99px;padding:5px 14px;color:var(--muted)}
   .ladder span.done{color:var(--good);border-color:var(--good);background:var(--good-bg)}
@@ -131,16 +133,22 @@
   .disclaimer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:14px}
   .grade .num{font-size:1.7rem}
   .rules{color:var(--muted);font-size:.95rem;margin:0}
-  @media (max-width:480px){ .pad textarea{min-height:110px;max-height:32vh}
- header.board h1{font-size:1.5rem} .grade .num{flex-basis:52px;height:52px;font-size:1.3rem} }
+  @media (max-width:480px){ header.board h1{font-size:1.5rem} .grade .num{flex-basis:52px;height:52px;font-size:1.3rem} }
 </style>
 </head>
 <body>
 <button class="mute" id="mute" title="Sound on/off" aria-label="Sound on/off">🔊</button>
-<button class="pad-btn" id="pad-btn" title="Scratch pad" aria-label="Scratch pad">📝</button>
-<div class="pad" id="pad" hidden>
-  <div class="pad-head"><b>📝 Scratch pad</b><span><button class="link" id="pad-clear">Clear</button><button class="link" id="pad-close">Close</button></span></div>
-  <textarea id="pad-text" placeholder="Work problems out here. Your notes stay while you take the test."></textarea>
+<canvas class="draw-canvas" id="draw-canvas"></canvas>
+<button class="pad-btn" id="draw-btn" title="Draw on the screen" aria-label="Draw on the screen">✏️</button>
+<div class="draw-tools" id="draw-tools" hidden>
+  <button data-tool="pen" class="on" title="Pen">✏️</button>
+  <button data-tool="eraser" title="Eraser">🧽</button>
+  <button class="swatch on" data-color="#ffd479" style="background:#ffd479" title="Yellow"></button>
+  <button class="swatch" data-color="#7aa2ff" style="background:#7aa2ff" title="Blue"></button>
+  <button class="swatch" data-color="#6ce5a0" style="background:#6ce5a0" title="Green"></button>
+  <button class="swatch" data-color="#ff8b7a" style="background:#ff8b7a" title="Red"></button>
+  <button id="draw-clear" title="Erase everything">🗑️</button>
+  <button id="draw-done" class="primary">Done</button>
 </div>
 <div class="wrap" id="app"></div>
 
@@ -2824,15 +2832,47 @@ const drawMute = () => { muteBtn.textContent = Sound.muted ? '🔇' : '🔊'; };
 muteBtn.onclick = () => { Sound.setMuted(!Sound.muted); drawMute(); Sound.button(); };
 drawMute();
 // Every ordinary button clicks on press (answers and the mute toggle have their own sounds).
-// ---------- scratch pad: notes that stay put while you work through a test ----------
-const padBtn = document.getElementById('pad-btn'), padBox = document.getElementById('pad'), padText = document.getElementById('pad-text');
-try { padText.value = localStorage.getItem('gradecheck.scratch') || ''; } catch {}
-const padSave = () => { try { localStorage.setItem('gradecheck.scratch', padText.value); } catch {} };
-const padShow = on => { padBox.hidden = !on; padBtn.classList.toggle('on', on); if (on) padText.focus(); };
-padBtn.onclick = () => padShow(padBox.hidden);
-document.getElementById('pad-close').onclick = () => padShow(false);
-document.getElementById('pad-clear').onclick = () => { padText.value = ''; padSave(); padText.focus(); };
-padText.oninput = padSave;
+// ---------- draw on the screen: a transparent canvas over the whole page ----------
+const dCanvas = document.getElementById('draw-canvas'), dBtn = document.getElementById('draw-btn'), dTools = document.getElementById('draw-tools');
+const dctx = dCanvas.getContext('2d');
+let drawMode = false, drawing = false, tool = 'pen', penColor = '#ffd479';
+function fitCanvas(){
+  // Back the canvas with real device pixels but draw in CSS pixels, so strokes land exactly under the cursor.
+  const w = dCanvas.clientWidth, h = dCanvas.clientHeight, dpr = window.devicePixelRatio || 1;
+  let keep = null;
+  if (dCanvas.width){ keep = document.createElement('canvas'); keep.width = dCanvas.width; keep.height = dCanvas.height; keep.getContext('2d').drawImage(dCanvas, 0, 0); }
+  const oldW = dCanvas.oldW || w, oldH = dCanvas.oldH || h;
+  dCanvas.width = Math.round(w * dpr); dCanvas.height = Math.round(h * dpr);
+  dCanvas.oldW = w; dCanvas.oldH = h;
+  dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  dctx.lineCap = 'round'; dctx.lineJoin = 'round';
+  if (keep) dctx.drawImage(keep, 0, 0, oldW, oldH);
+}
+fitCanvas();
+addEventListener('resize', fitCanvas);
+const setDrawMode = on => { drawMode = on; document.body.classList.toggle('drawing', on); dTools.hidden = !on; dBtn.classList.toggle('on', on); };
+dBtn.onclick = () => setDrawMode(!drawMode);
+document.getElementById('draw-done').onclick = () => setDrawMode(false);
+document.getElementById('draw-clear').onclick = () => dctx.clearRect(0, 0, dCanvas.width, dCanvas.height);
+dTools.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
+  tool = b.dataset.tool;
+  dTools.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('on', x === b));
+});
+dTools.querySelectorAll('[data-color]').forEach(b => b.onclick = () => {
+  penColor = b.dataset.color; tool = 'pen';
+  dTools.querySelectorAll('[data-color]').forEach(x => x.classList.toggle('on', x === b));
+  dTools.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === 'pen'));
+});
+const stroke = e => {
+  dctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+  dctx.strokeStyle = penColor;
+  dctx.lineWidth = tool === 'eraser' ? 28 : 3;
+  dctx.lineTo(e.clientX, e.clientY);
+  dctx.stroke();
+};
+dCanvas.addEventListener('pointerdown', e => { drawing = true; dCanvas.setPointerCapture(e.pointerId); dctx.beginPath(); dctx.moveTo(e.clientX, e.clientY); stroke(e); });
+dCanvas.addEventListener('pointermove', e => { if (drawing) stroke(e); });
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => dCanvas.addEventListener(ev, () => { drawing = false; }));
 
 document.addEventListener('pointerdown', e => {
   const b = e.target.closest('button');

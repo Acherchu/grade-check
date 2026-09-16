@@ -23,9 +23,12 @@ A single-file study site with a level ladder: **7th Grade → 8th Grade → GED*
 
 Dim theme only; Web Audio sound effects with a mute button.
 
-- **Scratch pad** — the 📝 button (next to mute, always on screen) opens a notes panel for working out
-  problems. Text is kept in `localStorage` key `gradecheck.scratch` until you press Clear. The global
-  keydown handler ignores events from `textarea`/`input`, so typing 1-4 there doesn't answer questions.
+- **Draw on the screen** — the ✏️ button (next to mute) turns the whole page into a drawing surface:
+  a transparent full-screen `<canvas>` (`#draw-canvas`) with pen/eraser, four colors, erase-all and Done.
+  While drawing, `body.drawing` gives the canvas `pointer-events:auto` (so the page can't be clicked or
+  scrolled); Done sets it back to `none` and the drawing stays visible on top. The canvas is backed by
+  device pixels (`devicePixelRatio`) but drawn in CSS pixels, and needs an explicit `width/height:100v*`
+  because a canvas is a replaced element and won't stretch from `inset:0`. Drawings are not saved.
 
 ## How the code is organized (all in `index.html`)
 
